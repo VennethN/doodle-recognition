@@ -29,25 +29,11 @@ env/
 # Jupyter Notebook
 .ipynb_checkpoints/
 
-# Large model files
-*.pth
-*.h5
-*.pkl
-*.pt
-*.onnx
-*.pb
-
-# Model directories (contain large trained models)
-classical_ml_model/
-similarity_model/
-models/
-
 # Large dataset directory
 doodles/
 
-# Reference embeddings (large JSON files)
-*_embeddings.json
-protonet_reference_embeddings.json
+# Classical ML model directory
+classical_ml_model/
 
 # LaTeX auxiliary files
 *.aux

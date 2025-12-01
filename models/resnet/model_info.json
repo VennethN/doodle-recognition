@@ -1,0 +1,8 @@
+{
+  "img_size": 160,
+  "num_classes": 340,
+  "batch_size": 64,
+  "test_accuracy": 0.7502549019607843,
+  "test_top3_accuracy": 0.9070196078431373,
+  "model_architecture": "DoodleCNN"
+}
