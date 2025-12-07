@@ -1,0 +1,1664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doodle Recognition</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0a0f;
+            --bg-card: #12121a;
+            --bg-elevated: #1a1a25;
+            --accent-cyan: #00ffc8;
+            --accent-magenta: #ff3296;
+            --accent-purple: #9664ff;
+            --accent-gold: #ffc832;
+            --text-primary: #e8e8f0;
+            --text-secondary: #8888a0;
+            --text-dim: #5555668;
+            --border-color: #2a2a3a;
+            --success: #32ff64;
+            --canvas-bg: #181820;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated background */
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse at 20% 20%, rgba(0, 255, 200, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(255, 50, 150, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(150, 100, 255, 0.05) 0%, transparent 70%);
+            z-index: -1;
+            animation: pulse 8s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            padding: 30px 0 20px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 2px;
+            text-shadow: 0 0 40px rgba(0, 255, 200, 0.3);
+            margin-bottom: 12px;
+        }
+
+        .model-selector {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background: var(--bg-elevated);
+            border-radius: 30px;
+            border: 1px solid var(--border-color);
+        }
+
+        .model-selector label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .model-selector select {
+            background: var(--bg-card);
+            color: var(--accent-cyan);
+            border: 1px solid var(--accent-cyan);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .model-selector select:hover {
+            background: rgba(0, 255, 200, 0.1);
+        }
+
+        .model-selector select:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(0, 255, 200, 0.3);
+        }
+
+        .info-btn {
+            background: transparent;
+            border: 1px solid var(--text-secondary);
+            color: var(--text-secondary);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .info-btn:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+            background: rgba(0, 255, 200, 0.1);
+        }
+
+        /* Main content */
+        .main-content {
+            display: grid;
+            grid-template-columns: 1.3fr 0.7fr;
+            gap: 30px;
+            align-items: start;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-header h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            color: var(--text-primary);
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        /* Canvas section */
+        .canvas-card {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 30px rgba(0, 255, 200, 0.1);
+        }
+
+        .canvas-card .card-header {
+            border-color: rgba(0, 255, 200, 0.3);
+        }
+
+        .canvas-wrapper {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+
+        .tools-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 12px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            min-width: 60px;
+        }
+
+        .tool-icon-btn {
+            width: 48px;
+            height: 48px;
+            padding: 0;
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            position: relative;
+        }
+
+        .tool-icon-btn:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(0, 255, 200, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .tool-icon-btn.active {
+            border-color: var(--accent-cyan);
+            background: linear-gradient(135deg, rgba(0, 255, 200, 0.2), rgba(150, 100, 255, 0.2));
+            box-shadow: 0 0 15px rgba(0, 255, 200, 0.3);
+        }
+
+        .tool-icon-btn.active::after {
+            content: '';
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 8px;
+            height: 8px;
+            background: var(--accent-cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--accent-cyan);
+        }
+
+        .canvas-container {
+            position: relative;
+            flex: 1;
+            aspect-ratio: 1;
+            background: var(--canvas-bg);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        #canvas.eraser-mode {
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="white" stroke-width="2"/></svg>') 12 12, auto;
+        }
+
+        .canvas-tools {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .tool-btn {
+            padding: 10px 18px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 10px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tool-btn:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(0, 255, 200, 0.1);
+        }
+
+        .tool-btn:active {
+            transform: scale(0.98);
+        }
+
+        .tool-btn.primary {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border: none;
+            color: var(--bg-dark);
+            font-weight: 600;
+        }
+
+        .tool-btn.primary:hover {
+            opacity: 0.9;
+        }
+
+        .tool-btn.skip-btn {
+            padding: 6px 14px;
+            font-size: 0.75rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .tool-btn.skip-btn:hover {
+            opacity: 1;
+            border-color: var(--text-secondary);
+            color: var(--text-primary);
+        }
+
+        .brush-size {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+            padding: 6px 14px;
+            background: var(--bg-elevated);
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .brush-size span {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .brush-size input[type="range"] {
+            width: 100px;
+            accent-color: var(--accent-cyan);
+        }
+
+        .brush-preview {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .brush-dot {
+            background: var(--text-primary);
+            border-radius: 50%;
+            transition: all 0.1s;
+        }
+
+        /* Predictions section */
+        .predictions-card {
+            border-color: var(--accent-magenta);
+            box-shadow: 0 0 30px rgba(255, 50, 150, 0.1);
+        }
+
+        .predictions-card .card-header {
+            border-color: rgba(255, 50, 150, 0.3);
+        }
+
+        .predictions-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-height: 400px;
+        }
+
+        .prediction-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-elevated);
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+
+        .prediction-item.top-1 {
+            background: linear-gradient(135deg, rgba(0, 255, 200, 0.15), rgba(150, 100, 255, 0.15));
+            border: 1px solid var(--accent-cyan);
+        }
+
+        .prediction-item.top-2,
+        .prediction-item.top-3 {
+            background: rgba(150, 100, 255, 0.1);
+        }
+
+        .prediction-rank {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            width: 28px;
+        }
+
+        .prediction-item.top-1 .prediction-rank,
+        .prediction-item.top-2 .prediction-rank,
+        .prediction-item.top-3 .prediction-rank {
+            color: var(--accent-cyan);
+            font-weight: 600;
+        }
+
+        .prediction-label {
+            flex: 1;
+            font-weight: 500;
+        }
+
+        .prediction-bar {
+            flex: 1;
+            height: 6px;
+            background: var(--border-color);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .prediction-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-magenta), var(--accent-purple));
+            border-radius: 3px;
+            transition: width 0.3s ease-out;
+        }
+
+        .prediction-item.top-1 .prediction-bar-fill {
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+        }
+
+        .prediction-confidence {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            width: 60px;
+            text-align: right;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 400px;
+            color: var(--text-secondary);
+            gap: 12px;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            opacity: 0.5;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border-radius: 20px;
+            border: 1px solid var(--accent-purple);
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow: hidden;
+            transform: scale(0.9);
+            transition: transform 0.3s;
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-header h3 {
+            color: var(--accent-cyan);
+            font-size: 1.2rem;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 4px;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: var(--accent-magenta);
+        }
+
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 60vh;
+        }
+
+        .info-row {
+            display: flex;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: var(--text-secondary);
+            width: 140px;
+            flex-shrink: 0;
+            font-size: 0.9rem;
+        }
+
+        .info-value {
+            color: var(--text-primary);
+            font-size: 0.95rem;
+        }
+
+        /* Loading state */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-color);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Keyboard shortcuts hint */
+        .shortcuts {
+            margin-top: 20px;
+            padding: 16px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .shortcuts kbd {
+            background: var(--bg-card);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            border: 1px solid var(--border-color);
+            margin: 0 2px;
+        }
+
+        /* Status indicator */
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Challenge Mode Footer */
+        .challenge-footer {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 16px 30px;
+            background: linear-gradient(180deg, rgba(18, 18, 26, 0.95), rgba(10, 10, 15, 0.98));
+            border-top: 1px solid var(--accent-magenta);
+            box-shadow: 0 -10px 40px rgba(255, 50, 150, 0.15);
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .challenge-footer.active {
+            display: block;
+        }
+
+        .challenge-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 30px;
+        }
+
+        .challenge-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .challenge-center {
+            flex: 1;
+            text-align: center;
+        }
+
+        .challenge-right {
+            display: flex;
+            align-items: center;
+        }
+
+        .challenge-word {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 0 0 30px rgba(0, 255, 200, 0.5);
+        }
+
+        .challenge-word.success {
+            color: var(--success);
+            animation: celebrate 0.5s ease-out;
+        }
+
+        @keyframes celebrate {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .challenge-prompt {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .challenge-stats {
+            display: flex;
+            gap: 25px;
+        }
+
+        .challenge-stat {
+            text-align: center;
+        }
+
+        .challenge-stat-value {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--accent-gold);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .challenge-stat-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .challenge-success-msg {
+            color: var(--success);
+            font-weight: 500;
+            font-size: 0.95rem;
+            display: none;
+        }
+
+        .challenge-success-msg.show {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .scoring-legend {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+
+        .scoring-legend span {
+            padding: 2px 6px;
+            background: rgba(255, 200, 50, 0.1);
+            border-radius: 4px;
+            color: var(--accent-gold);
+        }
+
+        /* Add bottom padding to container when challenge mode is active */
+        body.challenge-active {
+            padding-bottom: 100px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .mode-toggle {
+            display: flex;
+            gap: 8px;
+            margin-left: 20px;
+        }
+
+        .mode-btn {
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            border-radius: 20px;
+            cursor: pointer;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .mode-btn:hover {
+            border-color: var(--accent-cyan);
+            color: var(--text-primary);
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-color: transparent;
+            color: var(--bg-dark);
+            font-weight: 600;
+        }
+
+        /* Target word highlight in predictions */
+        .prediction-item.target-word {
+            background: linear-gradient(90deg, rgba(0, 255, 200, 0.15), rgba(150, 100, 255, 0.1));
+            border-color: var(--accent-cyan);
+        }
+
+        .prediction-item.target-word .prediction-label {
+            color: var(--accent-cyan);
+            font-weight: 600;
+        }
+
+        /* Scoring range highlight */
+        .prediction-item.scoring-range {
+            border-left: 2px solid var(--accent-gold);
+        }
+
+        .points-hint {
+            font-size: 0.75rem;
+            color: var(--accent-gold);
+            font-weight: 600;
+            margin-left: 8px;
+            padding: 2px 6px;
+            background: rgba(255, 200, 50, 0.15);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+    
+    <div class="container">
+        <header>
+            <h1>✨ DOODLE RECOGNITION</h1>
+            <div class="model-selector">
+                <label>Model:</label>
+                <select id="modelSelect">
+                    <option value="">Loading...</option>
+                </select>
+                <button class="info-btn" id="infoBtn" title="Model Info">ℹ</button>
+                <div class="status">
+                    <div class="status-dot"></div>
+                    <span id="categoryCount">-- categories</span>
+                </div>
+                <div class="mode-toggle">
+                    <button class="mode-btn active" id="freeDrawBtn">Free Draw</button>
+                    <button class="mode-btn" id="challengeBtn">🎯 Challenge</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="card canvas-card">
+                <div class="card-header">
+                    <h2>🎨 CANVAS</h2>
+                    <div class="brush-size">
+                        <span>Brush:</span>
+                        <input type="range" id="brushSize" min="2" max="30" value="8">
+                        <div class="brush-preview">
+                            <div class="brush-dot" id="brushPreview"></div>
+                        </div>
+                        <span id="brushSizeValue">8px</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="canvas-wrapper">
+                        <div class="tools-panel">
+                            <button class="tool-icon-btn active" id="brushTool" title="Brush">
+                                ✏️
+                            </button>
+                            <button class="tool-icon-btn" id="eraserTool" title="Eraser">
+                                🧹
+                            </button>
+                        </div>
+                        <div class="canvas-container">
+                            <canvas id="canvas" width="640" height="640"></canvas>
+                        </div>
+                    </div>
+                    <div style="height: 16px;"></div>
+                    <div class="canvas-tools">
+                        <button class="tool-btn" id="undoBtn">↩ Undo</button>
+                        <button class="tool-btn" id="redoBtn">↪ Redo</button>
+                        <button class="tool-btn primary" id="clearBtn">🗑 Clear</button>
+                        <button class="tool-btn primary" id="nextBtn" style="display: none;">Next ▶</button>
+                    </div>
+                    <div class="shortcuts">
+                        <strong>Shortcuts:</strong>
+                        <kbd>Ctrl+Z</kbd> Undo •
+                        <kbd>Ctrl+Y</kbd> Redo •
+                        <kbd>C</kbd> Clear •
+                        <kbd>B</kbd> Brush •
+                        <kbd>E</kbd> Eraser •
+                        <kbd>[</kbd> / <kbd>]</kbd> Brush size •
+                        <kbd>Space</kbd> Next (challenge)
+                    </div>
+                    <div style="margin-top: 12px; text-align: center;">
+                        <button class="tool-btn skip-btn" id="skipBtn" style="display: none;">Skip Challenge</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card predictions-card">
+                <div class="card-header">
+                    <h2>🔮 PREDICTIONS</h2>
+                    <span id="predictionStatus" style="font-size: 0.85rem; color: var(--text-secondary);"></span>
+                </div>
+                <div class="card-body">
+                    <div class="predictions-list" id="predictionsList">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+                            </svg>
+                            <span>Start drawing to see predictions...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Challenge Mode Footer -->
+        <div class="challenge-footer" id="challengeHeader">
+            <div class="challenge-content">
+                <div class="challenge-left">
+                    <div class="challenge-prompt">DRAW:</div>
+                    <div class="challenge-word" id="challengeWord">CAT</div>
+                </div>
+                <div class="challenge-center">
+                    <div class="challenge-success-msg" id="successMsg">🎉 Great job! Press SPACE or click Next</div>
+                    <div class="scoring-legend">
+                        <span>#1 = 5pts</span>
+                        <span>#2 = 4pts</span>
+                        <span>#3 = 3pts</span>
+                        <span>#4 = 2pts</span>
+                        <span>#5 = 1pt</span>
+                    </div>
+                </div>
+                <div class="challenge-right">
+                    <div class="challenge-stats">
+                        <div class="challenge-stat">
+                            <div class="challenge-stat-value" id="scoreValue">0</div>
+                            <div class="challenge-stat-label">Points</div>
+                        </div>
+                        <div class="challenge-stat">
+                            <div class="challenge-stat-value" id="streakValue">0</div>
+                            <div class="challenge-stat-label">Streak</div>
+                        </div>
+                        <div class="challenge-stat">
+                            <div class="challenge-stat-value" id="bestStreakValue">0</div>
+                            <div class="challenge-stat-label">Best Streak</div>
+                        </div>
+                        <div class="challenge-stat">
+                            <div class="challenge-stat-value" id="highScoreValue">0</div>
+                            <div class="challenge-stat-label">High Score</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Info Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>📊 Model Information</h3>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="loading"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confetti Library -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+    <script>
+        // =====================================================================
+        // Confetti Functions
+        // =====================================================================
+        function triggerConfetti(type = 'default') {
+            const duration = 2000;
+            const end = Date.now() + duration;
+            
+            if (type === 'perfect') {
+                // Big celebration for perfect #1
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 },
+                    colors: ['#00ffc8', '#ff3296', '#9664ff', '#ffc832']
+                });
+                
+                setTimeout(() => {
+                    confetti({
+                        particleCount: 50,
+                        angle: 60,
+                        spread: 55,
+                        origin: { x: 0 },
+                        colors: ['#00ffc8', '#ff3296', '#9664ff', '#ffc832']
+                    });
+                }, 250);
+                
+                setTimeout(() => {
+                    confetti({
+                        particleCount: 50,
+                        angle: 120,
+                        spread: 55,
+                        origin: { x: 1 },
+                        colors: ['#00ffc8', '#ff3296', '#9664ff', '#ffc832']
+                    });
+                }, 400);
+            } else if (type === 'improved') {
+                // Improvement celebration
+                confetti({
+                    particleCount: 50,
+                    spread: 60,
+                    origin: { y: 0.6 },
+                    colors: ['#00ffc8', '#9664ff']
+                });
+            } else {
+                // Default success celebration
+                confetti({
+                    particleCount: 30,
+                    spread: 50,
+                    origin: { y: 0.6 },
+                    colors: ['#00ffc8', '#ff3296', '#9664ff']
+                });
+            }
+        }
+
+        // =====================================================================
+        // State
+        // =====================================================================
+        let currentModel = null;
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let brushSize = 8;
+        let currentTool = 'brush'; // 'brush' or 'eraser'
+        let undoStack = [];
+        let redoStack = [];
+        let hasDrawn = false;
+        let predictionInterval = null;
+        let lastPredictionTime = 0;
+        const PREDICTION_INTERVAL = 400; // Predict every 400ms during drawing
+        
+        // Challenge mode state
+        let challengeMode = false;
+        let challengeWord = '';
+        let challengeSuccess = false;
+        let currentChallengeRank = -1;  // Best rank achieved for current challenge (-1 = not matched yet)
+        let currentChallengePoints = 0;  // Points earned for current challenge
+        let score = 0;
+        let streak = 0;
+        let bestStreak = 0;
+        let highScore = 0;  // Best score ever achieved
+        
+        // Load saved scores from localStorage
+        function loadScores() {
+            try {
+                const saved = localStorage.getItem('doodleChallengeScores');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    bestStreak = data.bestStreak || 0;
+                    highScore = data.highScore || 0;
+                    document.getElementById('bestStreakValue').textContent = bestStreak;
+                    document.getElementById('highScoreValue').textContent = highScore;
+                }
+            } catch (e) {
+                console.error('Failed to load scores:', e);
+            }
+        }
+        
+        // Save scores to localStorage
+        function saveScores() {
+            try {
+                const data = {
+                    bestStreak: bestStreak,
+                    highScore: highScore,
+                    lastUpdated: new Date().toISOString()
+                };
+                localStorage.setItem('doodleChallengeScores', JSON.stringify(data));
+            } catch (e) {
+                console.error('Failed to save scores:', e);
+            }
+        }
+        
+        // Load scores on page load
+        loadScores();
+
+        // =====================================================================
+        // Canvas Setup
+        // =====================================================================
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas size
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            const size = Math.min(container.clientWidth, container.clientHeight);
+            canvas.style.width = size + 'px';
+            canvas.style.height = size + 'px';
+        }
+
+        // Initialize canvas
+        function initCanvas() {
+            ctx.fillStyle = '#181820';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            updateToolSettings();
+        }
+        
+        // Update canvas settings based on current tool
+        function updateToolSettings() {
+            if (currentTool === 'eraser') {
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
+                ctx.fillStyle = 'rgba(0,0,0,1)';
+                canvas.classList.add('eraser-mode');
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.strokeStyle = '#ffffff';
+                ctx.fillStyle = '#ffffff';
+                canvas.classList.remove('eraser-mode');
+            }
+            ctx.lineWidth = brushSize;
+        }
+
+        // Save state for undo
+        function saveState() {
+            undoStack.push(canvas.toDataURL());
+            if (undoStack.length > 50) undoStack.shift();
+            redoStack = [];
+        }
+
+        // =====================================================================
+        // Drawing
+        // =====================================================================
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            if (e.touches) {
+                return {
+                    x: (e.touches[0].clientX - rect.left) * scaleX,
+                    y: (e.touches[0].clientY - rect.top) * scaleY
+                };
+            }
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
+            };
+        }
+
+        function startDrawing(e) {
+            e.preventDefault();
+            isDrawing = true;
+            const pos = getPos(e);
+            lastX = pos.x;
+            lastY = pos.y;
+            saveState();
+            
+            // Draw a dot for single clicks
+            ctx.beginPath();
+            ctx.arc(lastX, lastY, brushSize / 2, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            
+            // Start prediction interval
+            startPredictionInterval();
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+            
+            const pos = getPos(e);
+            
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.lineWidth = brushSize;
+            ctx.stroke();
+            
+            lastX = pos.x;
+            lastY = pos.y;
+            hasDrawn = true;
+        }
+
+        function stopDrawing() {
+            if (isDrawing) {
+                isDrawing = false;
+                // Do one final prediction when stopping
+                predict();
+            }
+            stopPredictionInterval();
+        }
+        
+        // Real-time prediction during drawing
+        function startPredictionInterval() {
+            stopPredictionInterval();
+            predictionInterval = setInterval(() => {
+                if (hasDrawn) {
+                    predict();
+                }
+            }, PREDICTION_INTERVAL);
+        }
+        
+        function stopPredictionInterval() {
+            if (predictionInterval) {
+                clearInterval(predictionInterval);
+                predictionInterval = null;
+            }
+        }
+
+        // Event listeners
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseleave', stopDrawing);
+
+        canvas.addEventListener('touchstart', startDrawing);
+        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchend', stopDrawing);
+
+        // =====================================================================
+        // Tools
+        // =====================================================================
+        function undo() {
+            if (undoStack.length === 0) return;
+            redoStack.push(canvas.toDataURL());
+            const img = new Image();
+            img.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                predict();
+            };
+            img.src = undoStack.pop();
+        }
+
+        function redo() {
+            if (redoStack.length === 0) return;
+            undoStack.push(canvas.toDataURL());
+            const img = new Image();
+            img.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                predict();
+            };
+            img.src = redoStack.pop();
+        }
+
+        function clearCanvas() {
+            saveState();
+            initCanvas();
+            hasDrawn = false;
+            document.getElementById('predictionsList').innerHTML = `
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+                    </svg>
+                    <span>Start drawing to see predictions...</span>
+                </div>
+            `;
+        }
+
+        document.getElementById('undoBtn').addEventListener('click', undo);
+        document.getElementById('redoBtn').addEventListener('click', redo);
+        document.getElementById('clearBtn').addEventListener('click', clearCanvas);
+
+        // Brush size
+        const brushSizeInput = document.getElementById('brushSize');
+        const brushSizeValue = document.getElementById('brushSizeValue');
+        const brushPreview = document.getElementById('brushPreview');
+
+        brushSizeInput.addEventListener('input', (e) => {
+            brushSize = parseInt(e.target.value);
+            brushSizeValue.textContent = brushSize + 'px';
+            brushPreview.style.width = Math.min(brushSize, 24) + 'px';
+            brushPreview.style.height = Math.min(brushSize, 24) + 'px';
+            updateToolSettings();
+        });
+
+        // Initialize brush preview
+        brushPreview.style.width = '8px';
+        brushPreview.style.height = '8px';
+
+        // Tool switching
+        function switchTool(tool) {
+            currentTool = tool;
+            
+            // Update UI
+            document.querySelectorAll('.tool-icon-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            if (tool === 'brush') {
+                document.getElementById('brushTool').classList.add('active');
+            } else if (tool === 'eraser') {
+                document.getElementById('eraserTool').classList.add('active');
+            }
+            
+            updateToolSettings();
+        }
+
+        document.getElementById('brushTool').addEventListener('click', () => switchTool('brush'));
+        document.getElementById('eraserTool').addEventListener('click', () => switchTool('eraser'));
+
+        // =====================================================================
+        // Keyboard Shortcuts
+        // =====================================================================
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'z') {
+                    e.preventDefault();
+                    undo();
+                } else if (e.key === 'y') {
+                    e.preventDefault();
+                    redo();
+                }
+            } else if (e.key === 'c' && !e.ctrlKey && document.activeElement.tagName !== 'INPUT') {
+                clearCanvas();
+            } else if (e.key === '[') {
+                brushSize = Math.max(2, brushSize - 2);
+                brushSizeInput.value = brushSize;
+                brushSizeValue.textContent = brushSize + 'px';
+                brushPreview.style.width = Math.min(brushSize, 24) + 'px';
+                brushPreview.style.height = Math.min(brushSize, 24) + 'px';
+                updateToolSettings();
+            } else if (e.key === ']') {
+                brushSize = Math.min(30, brushSize + 2);
+                brushSizeInput.value = brushSize;
+                brushSizeValue.textContent = brushSize + 'px';
+                brushPreview.style.width = Math.min(brushSize, 24) + 'px';
+                brushPreview.style.height = Math.min(brushSize, 24) + 'px';
+                updateToolSettings();
+            } else if (e.key.toLowerCase() === 'b' && document.activeElement.tagName !== 'INPUT') {
+                switchTool('brush');
+            } else if (e.key.toLowerCase() === 'e' && document.activeElement.tagName !== 'INPUT') {
+                switchTool('eraser');
+            } else if (e.key === 'Escape') {
+                document.getElementById('modalOverlay').classList.remove('active');
+            } else if (e.key === ' ' && challengeMode && document.activeElement.tagName !== 'INPUT') {
+                e.preventDefault();
+                nextChallenge();
+            }
+        });
+
+        // =====================================================================
+        // API
+        // =====================================================================
+        async function loadModels() {
+            try {
+                const response = await fetch('/api/models');
+                const data = await response.json();
+                
+                const select = document.getElementById('modelSelect');
+                select.innerHTML = '';
+                
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.key;
+                    option.textContent = `${model.name} (${model.num_classes} categories)`;
+                    if (model.is_current) {
+                        option.selected = true;
+                        currentModel = model.key;
+                        document.getElementById('categoryCount').textContent = model.num_classes + ' categories';
+                    }
+                    select.appendChild(option);
+                });
+                
+                select.addEventListener('change', async (e) => {
+                    currentModel = e.target.value;
+                    await fetch(`/api/model/${currentModel}`, { method: 'POST' });
+                    
+                    // Update category count
+                    const model = data.models.find(m => m.key === currentModel);
+                    if (model) {
+                        document.getElementById('categoryCount').textContent = model.num_classes + ' categories';
+                    }
+                    
+                    // Re-predict with new model
+                    if (hasDrawn) predict();
+                });
+            } catch (error) {
+                console.error('Failed to load models:', error);
+            }
+        }
+
+        async function predict() {
+            if (!hasDrawn) return;
+            
+            const statusEl = document.getElementById('predictionStatus');
+            statusEl.innerHTML = '<span class="loading"></span>';
+            
+            try {
+                const imageData = canvas.toDataURL('image/png');
+                
+                const response = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData, model: currentModel })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    statusEl.textContent = 'Error: ' + data.error;
+                    return;
+                }
+                
+                statusEl.textContent = '';
+                renderPredictions(data.predictions);
+                
+                // Check for challenge success (always check in challenge mode to update rank/points)
+                if (challengeMode && data.predictions.length > 0) {
+                    checkChallengeSuccess(data.predictions);
+                }
+            } catch (error) {
+                statusEl.textContent = 'Prediction failed';
+                console.error('Prediction error:', error);
+            }
+        }
+
+        function renderPredictions(predictions) {
+            const list = document.getElementById('predictionsList');
+            
+            if (!predictions || predictions.length === 0) {
+                list.innerHTML = '<div class="empty-state"><span>No predictions</span></div>';
+                return;
+            }
+            
+            list.innerHTML = predictions.map((pred, i) => {
+                const confidence = (pred.confidence * 100).toFixed(1);
+                const rankClass = i === 0 ? 'top-1' : (i < 3 ? `top-${i + 1}` : '');
+                const isTarget = challengeMode && pred.label.toLowerCase() === challengeWord.toLowerCase();
+                const inScoringRange = i < 5;
+                const pointsHint = challengeMode && inScoringRange ? ` <span class="points-hint">+${POINTS_BY_RANK[i]}pts</span>` : '';
+                
+                return `
+                    <div class="prediction-item ${rankClass} ${isTarget ? 'target-word' : ''} ${challengeMode && inScoringRange ? 'scoring-range' : ''}">
+                        <span class="prediction-rank">#${i + 1}</span>
+                        <span class="prediction-label">${isTarget ? '🎯 ' : ''}${pred.label}${isTarget ? pointsHint : ''}</span>
+                        <div class="prediction-bar">
+                            <div class="prediction-bar-fill" style="width: ${confidence}%"></div>
+                        </div>
+                        <span class="prediction-confidence">${confidence}%</span>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // =====================================================================
+        // Challenge Mode
+        // =====================================================================
+        const POINTS_BY_RANK = [5, 4, 3, 2, 1]; // #1=5pts, #2=4pts, etc.
+        
+        function checkChallengeSuccess(predictions) {
+            // Check if challenge word is in top 5 predictions
+            const top5 = predictions.slice(0, 5);
+            const matchIndex = top5.findIndex(p => p.label.toLowerCase() === challengeWord.toLowerCase());
+            
+            if (matchIndex !== -1) {
+                const newPoints = POINTS_BY_RANK[matchIndex];
+                let improved = false;
+                
+                // First time matching or improved rank?
+                if (!challengeSuccess) {
+                    // First success
+                    challengeSuccess = true;
+                    currentChallengeRank = matchIndex;
+                    currentChallengePoints = newPoints;
+                    score += newPoints;
+                    streak++;
+                    if (streak > bestStreak) {
+                        bestStreak = streak;
+                        document.getElementById('bestStreakValue').textContent = bestStreak;
+                        saveScores();
+                    }
+                    if (score > highScore) {
+                        highScore = score;
+                        document.getElementById('highScoreValue').textContent = highScore;
+                        saveScores();
+                    }
+                    document.getElementById('streakValue').textContent = streak;
+                    document.getElementById('nextBtn').style.display = 'inline-flex';
+                    
+                    // Trigger confetti for first success
+                    if (matchIndex === 0) {
+                        triggerConfetti('perfect');
+                    } else {
+                        triggerConfetti('default');
+                    }
+                } else if (matchIndex < currentChallengeRank) {
+                    // Improved rank! Add the difference
+                    improved = true;
+                    const bonusPoints = newPoints - currentChallengePoints;
+                    score += bonusPoints;
+                    if (score > highScore) {
+                        highScore = score;
+                        document.getElementById('highScoreValue').textContent = highScore;
+                        saveScores();
+                    }
+                    currentChallengeRank = matchIndex;
+                    currentChallengePoints = newPoints;
+                    
+                    // Trigger confetti for improvement
+                    if (matchIndex === 0) {
+                        triggerConfetti('perfect');
+                    } else {
+                        triggerConfetti('improved');
+                    }
+                }
+                
+                // Always update UI to show current best rank and points
+                document.getElementById('challengeWord').classList.add('success');
+                const isPerfect = currentChallengeRank === 0;
+                const rankText = isPerfect ? '🏆 PERFECT!' : `#${currentChallengeRank + 1}`;
+                const improvedText = improved ? ' ⬆️' : '';
+                const keepGoingText = isPerfect ? '' : ' Keep drawing to improve!';
+                document.getElementById('successMsg').innerHTML = `🎉 ${rankText} +${currentChallengePoints}pts${improvedText}${keepGoingText}`;
+                document.getElementById('successMsg').classList.add('show');
+                document.getElementById('scoreValue').textContent = score;
+            } else if (challengeSuccess) {
+                // Still show current best even if not in top 5 right now
+                const isPerfect = currentChallengeRank === 0;
+                const rankText = isPerfect ? '🏆 PERFECT!' : `#${currentChallengeRank + 1}`;
+                const keepGoingText = isPerfect ? '' : ' Keep drawing to improve!';
+                document.getElementById('successMsg').innerHTML = `🎉 ${rankText} +${currentChallengePoints}pts${keepGoingText}`;
+            }
+        }
+        
+        async function nextChallenge() {
+            try {
+                const response = await fetch('/api/challenge');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Challenge error:', data.error);
+                    return;
+                }
+                
+                challengeWord = data.word;
+                challengeSuccess = false;
+                currentChallengeRank = -1;
+                currentChallengePoints = 0;
+                
+                // Update UI
+                document.getElementById('challengeWord').textContent = challengeWord.toUpperCase();
+                document.getElementById('challengeWord').classList.remove('success');
+                document.getElementById('successMsg').classList.remove('show');
+                
+                // Clear canvas for new challenge
+                clearCanvas();
+            } catch (error) {
+                console.error('Failed to get challenge:', error);
+            }
+        }
+        
+        function startChallenge() {
+            challengeMode = true;
+            score = 0;
+            streak = 0;
+            
+            document.body.classList.add('challenge-active');
+            document.getElementById('challengeHeader').classList.add('active');
+            document.getElementById('freeDrawBtn').classList.remove('active');
+            document.getElementById('challengeBtn').classList.add('active');
+            document.getElementById('skipBtn').style.display = 'block';
+            document.getElementById('nextBtn').style.display = 'none';
+            document.getElementById('scoreValue').textContent = '0';
+            document.getElementById('streakValue').textContent = '0';
+            
+            nextChallenge();
+        }
+        
+        function stopChallenge() {
+            challengeMode = false;
+            challengeSuccess = false;
+            
+            document.body.classList.remove('challenge-active');
+            document.getElementById('challengeHeader').classList.remove('active');
+            document.getElementById('freeDrawBtn').classList.add('active');
+            document.getElementById('challengeBtn').classList.remove('active');
+            document.getElementById('skipBtn').style.display = 'none';
+            document.getElementById('nextBtn').style.display = 'none';
+        }
+        
+        // Challenge mode button listeners
+        document.getElementById('freeDrawBtn').addEventListener('click', stopChallenge);
+        document.getElementById('challengeBtn').addEventListener('click', startChallenge);
+        document.getElementById('skipBtn').addEventListener('click', () => {
+            streak = 0;
+            document.getElementById('streakValue').textContent = '0';
+            nextChallenge();
+        });
+        document.getElementById('nextBtn').addEventListener('click', nextChallenge);
+
+        // =====================================================================
+        // Model Info Modal
+        // =====================================================================
+        const modalOverlay = document.getElementById('modalOverlay');
+        const modalBody = document.getElementById('modalBody');
+
+        document.getElementById('infoBtn').addEventListener('click', async () => {
+            modalOverlay.classList.add('active');
+            modalBody.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="loading"></div></div>';
+            
+            try {
+                const response = await fetch(`/api/model/${currentModel}/info`);
+                const info = await response.json();
+                
+                let html = '';
+                
+                const fields = [
+                    ['name', 'Model Name'],
+                    ['model_type', 'Type'],
+                    ['model_architecture', 'Architecture'],
+                    ['num_classes', 'Categories'],
+                    ['test_accuracy', 'Test Accuracy', v => (v * 100).toFixed(1) + '%'],
+                    ['accuracy', 'Accuracy', v => (v * 100).toFixed(1) + '%'],
+                    ['best_val_accuracy', 'Validation Accuracy', v => (v * 100).toFixed(1) + '%'],
+                    ['img_size', 'Image Size', v => v + '×' + v],
+                    ['image_size', 'Image Size', v => v + '×' + v],
+                    ['embedding_dim', 'Embedding Dim'],
+                    ['distance_metric', 'Distance Metric'],
+                    ['method', 'Method'],
+                    ['feature_type', 'Feature Type'],
+                    ['batch_size', 'Batch Size'],
+                    ['num_epochs', 'Epochs'],
+                    ['description', 'Description'],
+                ];
+                
+                fields.forEach(([key, label, formatter]) => {
+                    if (info[key] !== undefined) {
+                        const value = formatter ? formatter(info[key]) : info[key];
+                        html += `
+                            <div class="info-row">
+                                <span class="info-label">${label}</span>
+                                <span class="info-value">${value}</span>
+                            </div>
+                        `;
+                    }
+                });
+                
+                // All results (for classical ML)
+                if (info.all_results) {
+                    html += `<div class="info-row"><span class="info-label" style="color: var(--accent-cyan);">All Results</span><span class="info-value"></span></div>`;
+                    for (const [name, acc] of Object.entries(info.all_results)) {
+                        html += `
+                            <div class="info-row" style="padding-left: 20px;">
+                                <span class="info-label">${name}</span>
+                                <span class="info-value">${(acc * 100).toFixed(1)}%</span>
+                            </div>
+                        `;
+                    }
+                }
+                
+                modalBody.innerHTML = html || '<p>No information available</p>';
+            } catch (error) {
+                modalBody.innerHTML = '<p style="color: var(--accent-magenta);">Failed to load model info</p>';
+            }
+        });
+
+        document.getElementById('modalClose').addEventListener('click', () => {
+            modalOverlay.classList.remove('active');
+        });
+
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                modalOverlay.classList.remove('active');
+            }
+        });
+
+        // =====================================================================
+        // Initialize
+        // =====================================================================
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            initCanvas();
+            loadModels();
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+    </script>
+</body>
+</html>
+

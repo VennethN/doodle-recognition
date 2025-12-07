@@ -18,6 +18,7 @@ import random
 import pickle
 import cv2
 from abc import ABC, abstractmethod
+from skimage.feature import hog
 
 # Model paths
 MODELS_DIR = "models"
@@ -566,11 +567,25 @@ class SimilarityBackend(ModelBackend):
         # Convert to uint8
         img_uint8 = img_resized.astype(np.uint8)
         
+        # Precompute expensive operations once (not per class!)
+        precomputed = {}
+        if self.method in ['features', 'multi']:
+            # Detect keypoints once for the input image
+            kp_img, desc_img = self.classifier.detector.detectAndCompute(img_uint8, None)
+            precomputed['keypoints'] = kp_img
+            precomputed['descriptors'] = desc_img
+        
+        if self.method in ['histogram', 'multi']:
+            # Compute histogram once for the input image
+            hist_img = cv2.calcHist([img_uint8], [0], None, [256], [0, 256])
+            cv2.normalize(hist_img, hist_img, 0, 1, cv2.NORM_MINMAX)
+            precomputed['histogram'] = hist_img
+        
         # Compute similarities for all classes
         similarities = {}
         for cls_idx in self.classifier.classes_:
             template_data = self.classifier.templates[cls_idx]
-            similarity = self.classifier._compute_similarity(img_uint8, template_data)
+            similarity = self._compute_similarity_optimized(img_uint8, template_data, precomputed)
             label = self.idx_to_label[cls_idx]
             similarities[label] = similarity
         
@@ -597,6 +612,214 @@ class SimilarityBackend(ModelBackend):
             predictions.append((label, float(prob)))
         
         return predictions
+    
+    def _compute_similarity_optimized(self, img, template_data, precomputed):
+        """Optimized similarity computation that reuses precomputed features"""
+        template = template_data['mean']
+        scores = []
+        
+        if self.method in ['template', 'multi']:
+            scores.append(self._template_match_score(img, template))
+        
+        if self.method in ['features', 'multi']:
+            # Use precomputed keypoints/descriptors instead of recomputing
+            kp_img = precomputed.get('keypoints')
+            desc_img = precomputed.get('descriptors')
+            if kp_img is not None and desc_img is not None:
+                scores.append(self._feature_match_score_optimized(desc_img, kp_img, template_data))
+            else:
+                scores.append(0.0)
+        
+        if self.method in ['histogram', 'multi']:
+            # Use precomputed histogram
+            hist_img = precomputed.get('histogram')
+            if hist_img is not None:
+                scores.append(self._histogram_match_score_optimized(hist_img, template))
+            else:
+                scores.append(0.0)
+        
+        return np.mean(scores) if scores else 0.0
+    
+    def _template_match_score(self, img, template):
+        """Use cv2.matchTemplate with multiple methods."""
+        # Normalize images
+        img_norm = cv2.normalize(img.astype(np.float32), None, 0, 1, cv2.NORM_MINMAX)
+        template_norm = cv2.normalize(template.astype(np.float32), None, 0, 1, cv2.NORM_MINMAX)
+        
+        # Try different matching methods
+        methods = [
+            cv2.TM_CCOEFF_NORMED,  # Normalized correlation coefficient
+            cv2.TM_CCORR_NORMED,   # Normalized cross-correlation
+        ]
+        
+        scores = []
+        for method in methods:
+            result = cv2.matchTemplate(img_norm, template_norm, method)
+            scores.append(np.max(result))
+        
+        return np.mean(scores)
+    
+    def _feature_match_score_optimized(self, desc_img, kp_img, template_data):
+        """Match using precomputed keypoint features."""
+        if desc_img is None or len(kp_img) < 4:
+            return 0.0
+        
+        best_matches = []
+        for desc_template in template_data['descriptors']:
+            if desc_template is None:
+                continue
+            
+            try:
+                if isinstance(self.classifier.matcher, cv2.BFMatcher) and self.classifier.matcher.getCrossCheck():
+                    # ORB with Hamming distance
+                    matches = self.classifier.matcher.match(desc_img, desc_template)
+                    matches = sorted(matches, key=lambda x: x.distance)
+                    best_matches.extend(matches[:20])  # Top 20 matches
+                else:
+                    # SIFT with ratio test
+                    matches = self.classifier.matcher.knnMatch(desc_img, desc_template, k=2)
+                    good_matches = []
+                    for match_pair in matches:
+                        if len(match_pair) == 2:
+                            m, n = match_pair
+                            if m.distance < 0.75 * n.distance:  # Lowe's ratio test
+                                good_matches.append(m)
+                    best_matches.extend(good_matches)
+            except:
+                continue
+        
+        if len(best_matches) == 0:
+            return 0.0
+        
+        # Score based on number of good matches
+        match_score = len(best_matches) / max(len(kp_img), 1)
+        return min(match_score, 1.0)
+    
+    def _histogram_match_score_optimized(self, hist_img, template):
+        """Compare histograms using precomputed input histogram."""
+        # Calculate histogram for template only
+        hist_template = cv2.calcHist([template], [0], None, [256], [0, 256])
+        cv2.normalize(hist_template, hist_template, 0, 1, cv2.NORM_MINMAX)
+        
+        # Compare using multiple methods
+        methods = [
+            cv2.HISTCMP_CORREL,      # Correlation
+            cv2.HISTCMP_INTERSECT,   # Intersection
+            cv2.HISTCMP_BHATTACHARYYA # Bhattacharyya distance
+        ]
+        
+        scores = []
+        for method in methods:
+            score = cv2.compareHist(hist_img, hist_template, method)
+            if method == cv2.HISTCMP_BHATTACHARYYA:
+                # Lower is better for Bhattacharyya, convert to similarity
+                score = 1.0 - min(score, 1.0)
+            scores.append(score)
+        
+        return np.mean(scores)
+
+
+class ClassicalMLBackend(ModelBackend):
+    """Classical ML model using scikit-learn classifiers (SVM, Random Forest, k-NN, etc.)"""
+    
+    def __init__(self, model_dir: str, device: torch.device):
+        self.device = device  # Not used but kept for interface consistency
+        self.model_dir = model_dir
+        
+        # Load model info
+        model_info_path = os.path.join(model_dir, "model_info.json")
+        if os.path.exists(model_info_path):
+            with open(model_info_path, 'r') as f:
+                info = json.load(f)
+            self.img_size = info.get('image_size', 64)
+            self.model_type = info.get('model_type', 'Unknown')
+        else:
+            self.img_size = 64
+            self.model_type = 'Unknown'
+        
+        # Load label mappings
+        with open(os.path.join(model_dir, "label_mappings.json"), 'r') as f:
+            mappings = json.load(f)
+        
+        self.idx_to_label = {int(k): v for k, v in mappings['idx_to_label'].items()}
+        self._all_labels = list(self.idx_to_label.values())
+        self._num_classes = len(self._all_labels)
+        
+        # Load the classifier from pickle
+        classifier_path = os.path.join(model_dir, "classifier.pkl")
+        with open(classifier_path, 'rb') as f:
+            self.classifier = pickle.load(f)
+        
+        # Load the scaler
+        scaler_path = os.path.join(model_dir, "scaler.pkl")
+        if os.path.exists(scaler_path):
+            with open(scaler_path, 'rb') as f:
+                self.scaler = pickle.load(f)
+        else:
+            self.scaler = None
+    
+    @property
+    def name(self) -> str:
+        return f"Classical ML ({self.model_type})"
+    
+    @property
+    def short_name(self) -> str:
+        return "Classical ML"
+    
+    @property
+    def num_classes(self) -> int:
+        return self._num_classes
+    
+    @property
+    def all_labels(self) -> list:
+        return self._all_labels
+    
+    def predict(self, surface, top_k=10) -> list:
+        # Convert pygame surface to numpy array (grayscale)
+        raw_str = pygame.image.tostring(surface, 'RGB')
+        img = Image.frombytes('RGB', surface.get_size(), raw_str)
+        
+        # Convert to grayscale numpy array
+        img_gray = img.convert('L')
+        img_array = np.array(img_gray)
+        
+        # Resize to model's expected size
+        img_resized = cv2.resize(img_array, (self.img_size, self.img_size))
+        
+        # Invert if needed (doodles are typically white on black)
+        if img_resized.mean() > 127:
+            img_resized = 255 - img_resized
+        
+        # Extract HOG features
+        hog_features = hog(
+            img_resized, orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2),
+            block_norm='L2-Hys', visualize=False, feature_vector=True
+        )
+        
+        # Scale features if scaler is available
+        if self.scaler is not None:
+            features_scaled = self.scaler.transform([hog_features])
+        else:
+            features_scaled = [hog_features]
+        
+        # Predict using classifier
+        if hasattr(self.classifier, 'predict_proba'):
+            # Get probability predictions
+            proba = self.classifier.predict_proba(features_scaled)[0]
+            # Get top k predictions
+            top_k_idx = np.argsort(proba)[-top_k:][::-1]
+            predictions = []
+            for idx in top_k_idx:
+                label = self.idx_to_label[idx]
+                confidence = float(proba[idx])
+                predictions.append((label, confidence))
+        else:
+            # Fallback: just get the top prediction
+            prediction = self.classifier.predict(features_scaled)[0]
+            label = self.idx_to_label[prediction]
+            predictions = [(label, 1.0)]
+        
+        return predictions
 
 
 def discover_models() -> dict:
@@ -615,14 +838,17 @@ def discover_models() -> dict:
                 models_found[model_name] = model_path
             # Check for similarity models (classifier.pkl)
             elif os.path.exists(os.path.join(model_path, "classifier.pkl")):
-                # Only include if it's a CV2SimilarityClassifier (check model_info.json)
+                # Check model_info.json to distinguish between similarity and classical ML
                 model_info_path = os.path.join(model_path, "model_info.json")
                 if os.path.exists(model_info_path):
                     try:
                         with open(model_info_path, 'r') as f:
                             info = json.load(f)
-                        # Only include CV2SimilarityClassifier models
-                        if info.get('model_type') == 'CV2SimilarityClassifier':
+                        model_type = info.get('model_type')
+                        # Include CV2SimilarityClassifier and classical ML models
+                        if model_type == 'CV2SimilarityClassifier':
+                            models_found[model_name] = model_path
+                        elif model_type in ['SVM', 'Random Forest', 'k-NN', 'Template Matching']:
                             models_found[model_name] = model_path
                     except:
                         # If we can't read model_info, skip it
@@ -643,9 +869,7 @@ def load_model_backend(model_type: str, model_dir: str, device: torch.device) ->
     elif model_type == "similarity":
         return SimilarityBackend(model_dir, device)
     elif model_type == "classical_ml":
-        # Classical ML models use scikit-learn classifiers, not CV2SimilarityClassifier
-        # They need a different backend (not implemented yet, or skip for now)
-        raise ValueError(f"Classical ML model backend not implemented. Model type: {model_type}")
+        return ClassicalMLBackend(model_dir, device)
     else:
         # Try to auto-detect based on files present
         if os.path.exists(os.path.join(model_dir, "classifier.pkl")):
@@ -654,12 +878,14 @@ def load_model_backend(model_type: str, model_dir: str, device: torch.device) ->
             if os.path.exists(model_info_path):
                 with open(model_info_path, 'r') as f:
                     info = json.load(f)
-                # Only use SimilarityBackend if it's actually a CV2SimilarityClassifier
-                if info.get('model_type') == 'CV2SimilarityClassifier':
+                # Use appropriate backend based on model type
+                classifier_type = info.get('model_type')
+                if classifier_type == 'CV2SimilarityClassifier':
                     return SimilarityBackend(model_dir, device)
+                elif classifier_type in ['SVM', 'Random Forest', 'k-NN', 'Template Matching']:
+                    return ClassicalMLBackend(model_dir, device)
                 else:
-                    # Other classifier types (SVM, Random Forest, etc.) not supported yet
-                    raise ValueError(f"Classifier type '{info.get('model_type')}' not supported. Only CV2SimilarityClassifier is supported.")
+                    raise ValueError(f"Classifier type '{classifier_type}' not supported.")
             else:
                 # No model_info.json, assume it's a similarity model (legacy)
                 return SimilarityBackend(model_dir, device)
@@ -784,6 +1010,9 @@ class DoodleApp:
         # Model menu state
         self.show_model_menu = False
         self.menu_hovered_index = -1
+        
+        # Model info modal state
+        self.show_model_info = False
         
         # Setup device
         self.device = self._setup_device()
@@ -1011,6 +1240,190 @@ class DoodleApp:
         
         return False
     
+    def draw_model_info(self):
+        """Draw the model information modal"""
+        # Semi-transparent overlay
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((20, 20, 30, 200))
+        self.screen.blit(overlay, (0, 0))
+        
+        # Modal dimensions
+        modal_width = 600
+        modal_height = 500
+        modal_x = (WINDOW_WIDTH - modal_width) // 2
+        modal_y = (WINDOW_HEIGHT - modal_height) // 2
+        
+        # Modal background
+        modal_rect = pygame.Rect(modal_x, modal_y, modal_width, modal_height)
+        draw_rounded_rect(self.screen, modal_rect, MENU_BG, 15)
+        pygame.draw.rect(self.screen, ACCENT_1, modal_rect, 2, border_radius=15)
+        
+        # Title
+        title = self.heading_font.render("MODEL INFORMATION", True, ACCENT_1)
+        title_rect = title.get_rect(centerx=modal_x + modal_width // 2, top=modal_y + 20)
+        self.screen.blit(title, title_rect)
+        
+        # Model name
+        model_name = self.label_font.render(self.current_model.name, True, TEXT_COLOR)
+        self.screen.blit(model_name, (modal_x + 30, modal_y + 60))
+        
+        # Load model info from JSON
+        model_dir = self.available_models[self.current_model_key]
+        model_info_path = os.path.join(model_dir, "model_info.json")
+        
+        y_offset = modal_y + 100
+        line_height = 30
+        
+        if os.path.exists(model_info_path):
+            try:
+                with open(model_info_path, 'r') as f:
+                    info = json.load(f)
+                
+                # Display key information
+                info_items = []
+                
+                # Model type
+                if 'model_type' in info:
+                    info_items.append(("Type", info['model_type']))
+                elif 'model_architecture' in info:
+                    info_items.append(("Architecture", info['model_architecture']))
+                
+                # Categories
+                if 'num_classes' in info:
+                    info_items.append(("Categories", str(info['num_classes'])))
+                
+                # Accuracy
+                if 'test_accuracy' in info:
+                    acc = info['test_accuracy']
+                    info_items.append(("Test Accuracy", f"{acc:.2%}"))
+                elif 'accuracy' in info:
+                    acc = info['accuracy']
+                    info_items.append(("Accuracy", f"{acc:.2%}"))
+                elif 'best_val_accuracy' in info:
+                    acc = info['best_val_accuracy']
+                    info_items.append(("Validation Accuracy", f"{acc:.2%}"))
+                
+                # Image size
+                if 'img_size' in info:
+                    info_items.append(("Image Size", f"{info['img_size']}×{info['img_size']}"))
+                elif 'image_size' in info:
+                    info_items.append(("Image Size", f"{info['image_size']}×{info['image_size']}"))
+                
+                # Method (for similarity models)
+                if 'method' in info:
+                    info_items.append(("Method", info['method']))
+                
+                # Feature type (for classical ML)
+                if 'feature_type' in info:
+                    info_items.append(("Feature Type", info['feature_type']))
+                
+                # Distance metric (for ProtoNet)
+                if 'distance_metric' in info:
+                    info_items.append(("Distance Metric", info['distance_metric']))
+                
+                # Embedding dimension (for ProtoNet)
+                if 'embedding_dim' in info:
+                    info_items.append(("Embedding Dimension", str(info['embedding_dim'])))
+                
+                # Batch size
+                if 'batch_size' in info:
+                    info_items.append(("Batch Size", str(info['batch_size'])))
+                
+                # Epochs
+                if 'num_epochs' in info:
+                    info_items.append(("Epochs", str(info['num_epochs'])))
+                
+                # Description
+                if 'description' in info:
+                    info_items.append(("Description", info['description']))
+                
+                # Draw info items
+                for label, value in info_items:
+                    if y_offset + line_height > modal_y + modal_height - 60:
+                        break  # Don't overflow
+                    
+                    label_surface = self.body_font.render(f"{label}:", True, DIM_TEXT)
+                    self.screen.blit(label_surface, (modal_x + 30, y_offset))
+                    
+                    # Wrap long values
+                    value_str = str(value)
+                    if len(value_str) > 50:
+                        # Split into multiple lines
+                        words = value_str.split()
+                        lines = []
+                        current_line = []
+                        current_len = 0
+                        for word in words:
+                            if current_len + len(word) + 1 > 50:
+                                lines.append(' '.join(current_line))
+                                current_line = [word]
+                                current_len = len(word)
+                            else:
+                                current_line.append(word)
+                                current_len += len(word) + 1
+                        if current_line:
+                            lines.append(' '.join(current_line))
+                        
+                        for i, line in enumerate(lines):
+                            value_surface = self.body_font.render(line, True, TEXT_COLOR)
+                            self.screen.blit(value_surface, (modal_x + 150, y_offset + i * line_height))
+                        y_offset += len(lines) * line_height
+                    else:
+                        value_surface = self.body_font.render(value_str, True, TEXT_COLOR)
+                        self.screen.blit(value_surface, (modal_x + 150, y_offset))
+                        y_offset += line_height
+                
+                # Show all results if available (for classical ML)
+                if 'all_results' in info:
+                    y_offset += 10
+                    results_title = self.body_font.render("All Results:", True, ACCENT_1)
+                    self.screen.blit(results_title, (modal_x + 30, y_offset))
+                    y_offset += line_height
+                    
+                    for model_name, acc in info['all_results'].items():
+                        result_text = f"  • {model_name}: {acc:.2%}"
+                        result_surface = self.small_font.render(result_text, True, DIM_TEXT)
+                        self.screen.blit(result_surface, (modal_x + 30, y_offset))
+                        y_offset += line_height - 5
+                
+            except Exception as e:
+                error_text = self.body_font.render(f"Error loading model info: {str(e)}", True, ACCENT_2)
+                self.screen.blit(error_text, (modal_x + 30, y_offset))
+        else:
+            no_info_text = self.body_font.render("No model_info.json found", True, DIM_TEXT)
+            self.screen.blit(no_info_text, (modal_x + 30, y_offset))
+        
+        # Close button hint
+        hint = self.small_font.render("Press ESC or click outside to close", True, DIM_TEXT)
+        hint_rect = hint.get_rect(centerx=modal_x + modal_width // 2, 
+                                  bottom=modal_y + modal_height - 15)
+        self.screen.blit(hint, hint_rect)
+    
+    def handle_model_info_event(self, event):
+        """Handle events for the model info modal"""
+        if not self.show_model_info:
+            return False
+        
+        modal_width = 600
+        modal_height = 500
+        modal_x = (WINDOW_WIDTH - modal_width) // 2
+        modal_y = (WINDOW_HEIGHT - modal_height) // 2
+        modal_rect = pygame.Rect(modal_x, modal_y, modal_width, modal_height)
+        
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                # Close if clicked outside modal
+                if not modal_rect.collidepoint(event.pos):
+                    self.show_model_info = False
+                    return True
+        
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.show_model_info = False
+                return True
+        
+        return False
+    
     def update_buttons(self):
         """Update buttons based on current mode"""
         btn_w = 75
@@ -1027,6 +1440,7 @@ class DoodleApp:
                 Button(x + 3*(btn_w + gap), y, btn_w, btn_h, "−", self.decrease_brush),
                 Button(x + 4*(btn_w + gap), y, btn_w, btn_h, "+", self.increase_brush),
                 Button(x + 5*(btn_w + gap), y, 100, btn_h, "Challenge ▶", self.switch_to_challenge),
+                Button(x + 5*(btn_w + gap) + 110, y, 90, btn_h, "ℹ Info", self.show_info),
             ]
         else:
             skip_label = "Next ▶" if self.challenge_success else "Skip"
@@ -1038,7 +1452,12 @@ class DoodleApp:
                 Button(x + 3*(btn_w + gap), y, btn_w, btn_h, "−", self.decrease_brush),
                 Button(x + 4*(btn_w + gap), y, btn_w, btn_h, "+", self.increase_brush),
                 Button(x + 5*(btn_w + gap), y, 100, btn_h, skip_label, skip_action),
+                Button(x + 5*(btn_w + gap) + 110, y, 90, btn_h, "ℹ Info", self.show_info),
             ]
+    
+    def show_info(self):
+        """Show model information modal"""
+        self.show_model_info = True
     
     def skip_challenge(self):
         """Skip current challenge (resets streak)"""
@@ -1403,7 +1822,12 @@ class DoodleApp:
                 self.running = False
                 continue
             
-            # Handle model menu events first if it's open
+            # Handle model info modal events first if it's open
+            if self.show_model_info:
+                if self.handle_model_info_event(event):
+                    continue
+            
+            # Handle model menu events if it's open
             if self.show_model_menu:
                 if self.handle_model_menu_event(event):
                     continue
@@ -1414,7 +1838,9 @@ class DoodleApp:
                 shift = mods & pygame.KMOD_SHIFT
                 
                 if event.key == pygame.K_ESCAPE:
-                    if self.show_model_menu:
+                    if self.show_model_info:
+                        self.show_model_info = False
+                    elif self.show_model_menu:
                         self.show_model_menu = False
                     elif self.mode == MODE_CHALLENGE:
                         self.switch_to_free_draw()
@@ -1464,8 +1890,8 @@ class DoodleApp:
                 if self.drawing and not self.show_model_menu:
                     self.draw_on_canvas(event.pos)
             
-            # Don't process button events if menu is open
-            if not self.show_model_menu:
+            # Don't process button events if menu or info modal is open
+            if not self.show_model_menu and not self.show_model_info:
                 for button in self.buttons:
                     button.handle_event(event)
                 
@@ -1498,6 +1924,10 @@ class DoodleApp:
                 button.draw(self.screen, self.body_font)
                 
             self.draw_instructions()
+            
+            # Draw model info modal if open
+            if self.show_model_info:
+                self.draw_model_info()
             
             # Draw model menu overlay if open
             if self.show_model_menu:
