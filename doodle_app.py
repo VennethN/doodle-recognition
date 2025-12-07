@@ -615,12 +615,21 @@ def discover_models() -> dict:
                 models_found[model_name] = model_path
             # Check for similarity models (classifier.pkl)
             elif os.path.exists(os.path.join(model_path, "classifier.pkl")):
-                models_found[model_name] = model_path
-    
-    # Also check similarity_model directory (legacy location)
-    similarity_model_dir = "similarity_model"
-    if os.path.exists(similarity_model_dir) and os.path.exists(os.path.join(similarity_model_dir, "classifier.pkl")):
-        models_found["similarity"] = similarity_model_dir
+                # Only include if it's a CV2SimilarityClassifier (check model_info.json)
+                model_info_path = os.path.join(model_path, "model_info.json")
+                if os.path.exists(model_info_path):
+                    try:
+                        with open(model_info_path, 'r') as f:
+                            info = json.load(f)
+                        # Only include CV2SimilarityClassifier models
+                        if info.get('model_type') == 'CV2SimilarityClassifier':
+                            models_found[model_name] = model_path
+                    except:
+                        # If we can't read model_info, skip it
+                        pass
+                else:
+                    # No model_info.json, assume it's a similarity model (legacy)
+                    models_found[model_name] = model_path
     
     return models_found
 
@@ -633,10 +642,27 @@ def load_model_backend(model_type: str, model_dir: str, device: torch.device) ->
         return ProtoNetBackend(model_dir, device)
     elif model_type == "similarity":
         return SimilarityBackend(model_dir, device)
+    elif model_type == "classical_ml":
+        # Classical ML models use scikit-learn classifiers, not CV2SimilarityClassifier
+        # They need a different backend (not implemented yet, or skip for now)
+        raise ValueError(f"Classical ML model backend not implemented. Model type: {model_type}")
     else:
         # Try to auto-detect based on files present
         if os.path.exists(os.path.join(model_dir, "classifier.pkl")):
-            return SimilarityBackend(model_dir, device)
+            # Check model_info.json to distinguish CV2SimilarityClassifier from other classifiers
+            model_info_path = os.path.join(model_dir, "model_info.json")
+            if os.path.exists(model_info_path):
+                with open(model_info_path, 'r') as f:
+                    info = json.load(f)
+                # Only use SimilarityBackend if it's actually a CV2SimilarityClassifier
+                if info.get('model_type') == 'CV2SimilarityClassifier':
+                    return SimilarityBackend(model_dir, device)
+                else:
+                    # Other classifier types (SVM, Random Forest, etc.) not supported yet
+                    raise ValueError(f"Classifier type '{info.get('model_type')}' not supported. Only CV2SimilarityClassifier is supported.")
+            else:
+                # No model_info.json, assume it's a similarity model (legacy)
+                return SimilarityBackend(model_dir, device)
         elif os.path.exists(os.path.join(model_dir, "model.pth")):
             # Check if it's resnet or protonet based on model_info.json
             if os.path.exists(os.path.join(model_dir, "model_info.json")):

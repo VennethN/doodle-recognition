@@ -1,0 +1,13 @@
+{
+  "model_type": "SVM",
+  "image_size": 64,
+  "num_classes": 50,
+  "feature_type": "HOG",
+  "accuracy": 0.5995,
+  "all_results": {
+    "SVM": 0.5995,
+    "Random Forest": 0.5335,
+    "Template Matching": 0.4735,
+    "k-NN": 0.46
+  }
+}
