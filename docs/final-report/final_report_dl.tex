@@ -317,9 +317,9 @@ We employed ResNet18 pre-trained on ImageNet (1.2M images, 1000 classes) and mod
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[
-    node distance=1.5cm,
-    block/.style={rectangle, draw=blue!50, fill=blue!20, minimum width=3.5cm, minimum height=0.8cm, text centered, font=\small},
-    arrow/.style={->, thick}
+    node distance=1.8cm,
+    block/.style={rectangle, draw=blue!50, fill=blue!20, minimum width=3.8cm, minimum height=0.9cm, text centered, font=\small, rounded corners=3pt},
+    arrow/.style={->, thick, color=blue!70}
 ]
 
 \node[block] (input) {Input: 160×160×3};
@@ -343,8 +343,8 @@ We employed ResNet18 pre-trained on ImageNet (1.2M images, 1000 classes) and mod
 \draw[arrow] (fc1) -- (fc2);
 \draw[arrow] (fc2) -- (output);
 
-\node[right of=res1, node distance=3.5cm, text=blue!60] {Pre-trained};
-\node[right of=fc1, node distance=3.5cm, text=green!60] {Custom Classifier};
+\node[right of=res1, node distance=4.2cm, text=blue!60, font=\small] {Pre-trained};
+\node[right of=fc1, node distance=4.2cm, text=green!60, font=\small] {Custom Classifier};
 
 \end{tikzpicture}
 \caption{ResNet18 Architecture for Doodle Classification}
@@ -499,27 +499,34 @@ OpenCV Similarity & 25-35\% & 0 & ~500ms & Template Matching \\
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[
-    node distance=2cm,
-    box/.style={rectangle, draw=blue!50, fill=blue!10, minimum width=3cm, minimum height=1cm, text centered, font=\small},
-    arrow/.style={->, thick}
+    node distance=2.2cm,
+    box/.style={rectangle, draw=blue!50, fill=blue!10, minimum width=3.2cm, minimum height=1.1cm, text centered, font=\small, rounded corners=5pt},
+    arrow/.style={<->, thick, color=blue!70},
+    label/.style={font=\scriptsize, color=black!70}
 ]
 
+% Main components
 \node[box] (frontend) {Frontend (HTML5 Canvas)};
-\node[box, right of=frontend, node distance=4cm] (api) {Flask API};
-\node[box, right of=api, node distance=4cm] (models) {Model Backends};
+\node[box, right of=frontend, node distance=5cm] (api) {Flask API};
+\node[box, right of=api, node distance=5cm] (models) {Model Backends};
 
-\node[box, below of=frontend, node distance=1.5cm] (canvas) {Drawing Canvas};
-\node[box, below of=api, node distance=1.5cm] (predict) {/api/predict};
-\node[box, below of=models, node distance=1.5cm] (resnet) {ResNet18};
+% Sub-components under Frontend
+\node[box, below of=frontend, node distance=1.8cm] (canvas) {Drawing Canvas};
+\node[box, below of=canvas, node distance=1.5cm] (challenge) {Challenge Mode};
 
-\node[box, below of=canvas, node distance=1.2cm] (challenge) {Challenge Mode};
-\node[box, below of=predict, node distance=1.2cm] (models_api) {/api/models};
-\node[box, below of=resnet, node distance=1.2cm] (similarity) {Similarity};
+% Sub-components under Flask API
+\node[box, below of=api, node distance=1.8cm] (predict) {/api/predict};
+\node[box, below of=predict, node distance=1.5cm] (models_api) {/api/models};
 
-\draw[arrow] (frontend) -- (api) node[midway, above] {Base64 Image};
-\draw[arrow] (api) -- (models) node[midway, above] {Tensor};
-\draw[arrow] (models) -- (api) node[midway, below] {Predictions};
-\draw[arrow] (api) -- (frontend) node[midway, below] {JSON};
+% Sub-components under Model Backends
+\node[box, below of=models, node distance=1.8cm] (resnet) {ResNet18};
+\node[box, below of=resnet, node distance=1.5cm] (similarity) {Similarity};
+
+% Arrows between main components
+\draw[arrow] (frontend) -- (api) node[midway, above, label] {Base64 Image};
+\draw[arrow] (api) -- (frontend) node[midway, below, label] {JSON};
+\draw[arrow] (api) -- (models) node[midway, above, label] {Tensor};
+\draw[arrow] (models) -- (api) node[midway, below, label] {Predictions};
 
 \end{tikzpicture}
 \caption{Web Application Architecture}
@@ -891,7 +898,7 @@ def predict():
 The complete source code, trained models, and documentation are available at:
 
 \begin{center}
-\url{https://github.com/[repository]/doodle-recognition}
+\url{https://github.com/VennethN/doodle-recognition-comvis}
 \end{center}
 
 \textbf{Repository Structure:}
