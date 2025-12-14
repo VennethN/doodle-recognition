@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Doodle Recognition App - Draw and predict doodles using trained models
-Supports multiple model backends: ResNet (classification), ProtoNet (few-shot), and Similarity (OpenCV)
+Supports multiple model backends: ResNet (classification) and Similarity (OpenCV)
 """
 
 import pygame
@@ -18,7 +18,6 @@ import random
 import pickle
 import cv2
 from abc import ABC, abstractmethod
-from skimage.feature import hog
 
 # Model paths
 MODELS_DIR = "models"
@@ -179,154 +178,6 @@ class ResNetBackend(ModelBackend):
         predictions = [
             (self.idx_to_label[idx.item()], float(top_probs[0][i].item()))
             for i, idx in enumerate(top_indices[0])
-        ]
-        
-        return predictions
-
-
-class ConvBlock(nn.Module):
-    """Basic convolutional block for ProtoNet"""
-    def __init__(self, in_channels, out_channels):
-        super(ConvBlock, self).__init__()
-        self.block = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2, 2)
-        )
-    
-    def forward(self, x):
-        return self.block(x)
-
-
-class ProtoNet(nn.Module):
-    """Prototypical Network encoder"""
-    def __init__(self, in_channels=1, hidden_dim=64, embedding_dim=64):
-        super(ProtoNet, self).__init__()
-        
-        self.encoder = nn.Sequential(
-            ConvBlock(in_channels, hidden_dim),
-            ConvBlock(hidden_dim, hidden_dim),
-            ConvBlock(hidden_dim, hidden_dim),
-            ConvBlock(hidden_dim, embedding_dim),
-        )
-        
-        self.fc = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(embedding_dim * 5 * 5, embedding_dim)
-        )
-    
-    def forward(self, x):
-        x = self.encoder(x)
-        x = self.fc(x)
-        return x
-
-
-class ProtoNetWithDistance(nn.Module):
-    """Full Prototypical Network with distance calculation (matches training architecture)"""
-    def __init__(self, in_channels=1, hidden_dim=64, embedding_dim=64, distance='euclidean'):
-        super(ProtoNetWithDistance, self).__init__()
-        self.encoder = ProtoNet(in_channels, hidden_dim, embedding_dim)
-        self.distance = distance
-    
-    def forward(self, x):
-        return self.encoder(x)
-    
-    def get_embedding(self, x):
-        return self.encoder(x)
-
-
-class ProtoNetBackend(ModelBackend):
-    """Prototypical Network for few-shot classification"""
-    
-    def __init__(self, model_dir: str, device: torch.device):
-        self.device = device
-        self.model_dir = model_dir
-        
-        # Load model info
-        with open(os.path.join(model_dir, "model_info.json"), 'r') as f:
-            info = json.load(f)
-        
-        self.img_size = info.get('img_size', 84)
-        self.embedding_dim = info.get('embedding_dim', 64)
-        
-        # Load reference embeddings (pre-computed prototypes)
-        with open(os.path.join(model_dir, "reference_embeddings.json"), 'r') as f:
-            embeddings_dict = json.load(f)
-        
-        self._all_labels = list(embeddings_dict.keys())
-        self._num_classes = len(self._all_labels)
-        
-        # Convert to tensor
-        self.prototypes = torch.tensor(
-            [embeddings_dict[label] for label in self._all_labels],
-            dtype=torch.float32
-        ).to(device)
-        
-        # Create and load model (uses ProtoNetWithDistance to match training architecture)
-        self.model = ProtoNetWithDistance(in_channels=1, hidden_dim=64, embedding_dim=self.embedding_dim)
-        model_path = os.path.join(model_dir, "model.pth")
-        
-        # Load from checkpoint dict (model was saved with optimizer state, etc.)
-        # Note: weights_only=False needed for checkpoint dicts with non-tensor data
-        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
-        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-            self.model.load_state_dict(checkpoint['model_state_dict'])
-        else:
-            self.model.load_state_dict(checkpoint)
-        
-        self.model.to(device)
-        self.model.eval()
-        
-        # Image transforms (grayscale)
-        self.transform = transforms.Compose([
-            transforms.Grayscale(num_output_channels=1),
-            transforms.Resize((self.img_size, self.img_size)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5], std=[0.5])
-        ])
-    
-    @property
-    def name(self) -> str:
-        return "Prototypical Network"
-    
-    @property
-    def short_name(self) -> str:
-        return "ProtoNet"
-    
-    @property
-    def num_classes(self) -> int:
-        return self._num_classes
-    
-    @property
-    def all_labels(self) -> list:
-        return self._all_labels
-    
-    def predict(self, surface, top_k=10) -> list:
-        # Convert pygame surface to PIL Image
-        raw_str = pygame.image.tostring(surface, 'RGB')
-        img = Image.frombytes('RGB', surface.get_size(), raw_str)
-        
-        # Apply transforms
-        img_tensor = self.transform(img).unsqueeze(0).to(self.device)
-        
-        # Get embedding
-        with torch.no_grad():
-            query_embedding = self.model.get_embedding(img_tensor)
-            
-            # Compute distances to prototypes (squared Euclidean)
-            query_expanded = query_embedding.unsqueeze(1)  # [1, 1, embedding_dim]
-            proto_expanded = self.prototypes.unsqueeze(0)  # [1, n_classes, embedding_dim]
-            distances = torch.sum((query_expanded - proto_expanded) ** 2, dim=2)  # [1, n_classes]
-            
-            # Convert to probabilities (negative distance -> softmax)
-            probs = F.softmax(-distances, dim=1).squeeze()
-        
-        # Get top k predictions
-        top_probs, top_indices = torch.topk(probs, min(top_k, len(self._all_labels)))
-        predictions = [
-            (self._all_labels[idx.item()], float(top_probs[i].item()))
-            for i, idx in enumerate(top_indices)
         ]
         
         return predictions
@@ -719,109 +570,6 @@ class SimilarityBackend(ModelBackend):
         return np.mean(scores)
 
 
-class ClassicalMLBackend(ModelBackend):
-    """Classical ML model using scikit-learn classifiers (SVM, Random Forest, k-NN, etc.)"""
-    
-    def __init__(self, model_dir: str, device: torch.device):
-        self.device = device  # Not used but kept for interface consistency
-        self.model_dir = model_dir
-        
-        # Load model info
-        model_info_path = os.path.join(model_dir, "model_info.json")
-        if os.path.exists(model_info_path):
-            with open(model_info_path, 'r') as f:
-                info = json.load(f)
-            self.img_size = info.get('image_size', 64)
-            self.model_type = info.get('model_type', 'Unknown')
-        else:
-            self.img_size = 64
-            self.model_type = 'Unknown'
-        
-        # Load label mappings
-        with open(os.path.join(model_dir, "label_mappings.json"), 'r') as f:
-            mappings = json.load(f)
-        
-        self.idx_to_label = {int(k): v for k, v in mappings['idx_to_label'].items()}
-        self._all_labels = list(self.idx_to_label.values())
-        self._num_classes = len(self._all_labels)
-        
-        # Load the classifier from pickle
-        classifier_path = os.path.join(model_dir, "classifier.pkl")
-        with open(classifier_path, 'rb') as f:
-            self.classifier = pickle.load(f)
-        
-        # Load the scaler
-        scaler_path = os.path.join(model_dir, "scaler.pkl")
-        if os.path.exists(scaler_path):
-            with open(scaler_path, 'rb') as f:
-                self.scaler = pickle.load(f)
-        else:
-            self.scaler = None
-    
-    @property
-    def name(self) -> str:
-        return f"Classical ML ({self.model_type})"
-    
-    @property
-    def short_name(self) -> str:
-        return "Classical ML"
-    
-    @property
-    def num_classes(self) -> int:
-        return self._num_classes
-    
-    @property
-    def all_labels(self) -> list:
-        return self._all_labels
-    
-    def predict(self, surface, top_k=10) -> list:
-        # Convert pygame surface to numpy array (grayscale)
-        raw_str = pygame.image.tostring(surface, 'RGB')
-        img = Image.frombytes('RGB', surface.get_size(), raw_str)
-        
-        # Convert to grayscale numpy array
-        img_gray = img.convert('L')
-        img_array = np.array(img_gray)
-        
-        # Resize to model's expected size
-        img_resized = cv2.resize(img_array, (self.img_size, self.img_size))
-        
-        # Invert if needed (doodles are typically white on black)
-        if img_resized.mean() > 127:
-            img_resized = 255 - img_resized
-        
-        # Extract HOG features
-        hog_features = hog(
-            img_resized, orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2),
-            block_norm='L2-Hys', visualize=False, feature_vector=True
-        )
-        
-        # Scale features if scaler is available
-        if self.scaler is not None:
-            features_scaled = self.scaler.transform([hog_features])
-        else:
-            features_scaled = [hog_features]
-        
-        # Predict using classifier
-        if hasattr(self.classifier, 'predict_proba'):
-            # Get probability predictions
-            proba = self.classifier.predict_proba(features_scaled)[0]
-            # Get top k predictions
-            top_k_idx = np.argsort(proba)[-top_k:][::-1]
-            predictions = []
-            for idx in top_k_idx:
-                label = self.idx_to_label[idx]
-                confidence = float(proba[idx])
-                predictions.append((label, confidence))
-        else:
-            # Fallback: just get the top prediction
-            prediction = self.classifier.predict(features_scaled)[0]
-            label = self.idx_to_label[prediction]
-            predictions = [(label, 1.0)]
-        
-        return predictions
-
-
 def discover_models() -> dict:
     """Discover available models in the models directory and similarity_model directory"""
     models_found = {}
@@ -838,17 +586,15 @@ def discover_models() -> dict:
                 models_found[model_name] = model_path
             # Check for similarity models (classifier.pkl)
             elif os.path.exists(os.path.join(model_path, "classifier.pkl")):
-                # Check model_info.json to distinguish between similarity and classical ML
+                # Check model_info.json to ensure it's CV2SimilarityClassifier
                 model_info_path = os.path.join(model_path, "model_info.json")
                 if os.path.exists(model_info_path):
                     try:
                         with open(model_info_path, 'r') as f:
                             info = json.load(f)
                         model_type = info.get('model_type')
-                        # Include CV2SimilarityClassifier and classical ML models
+                        # Only include CV2SimilarityClassifier
                         if model_type == 'CV2SimilarityClassifier':
-                            models_found[model_name] = model_path
-                        elif model_type in ['SVM', 'Random Forest', 'k-NN', 'Template Matching']:
                             models_found[model_name] = model_path
                     except:
                         # If we can't read model_info, skip it
@@ -864,40 +610,28 @@ def load_model_backend(model_type: str, model_dir: str, device: torch.device) ->
     """Load appropriate model backend based on type"""
     if model_type == "resnet":
         return ResNetBackend(model_dir, device)
-    elif model_type == "protonet":
-        return ProtoNetBackend(model_dir, device)
     elif model_type == "similarity":
         return SimilarityBackend(model_dir, device)
-    elif model_type == "classical_ml":
-        return ClassicalMLBackend(model_dir, device)
     else:
         # Try to auto-detect based on files present
         if os.path.exists(os.path.join(model_dir, "classifier.pkl")):
-            # Check model_info.json to distinguish CV2SimilarityClassifier from other classifiers
+            # Check model_info.json to ensure it's CV2SimilarityClassifier
             model_info_path = os.path.join(model_dir, "model_info.json")
             if os.path.exists(model_info_path):
                 with open(model_info_path, 'r') as f:
                     info = json.load(f)
-                # Use appropriate backend based on model type
+                # Only support CV2SimilarityClassifier
                 classifier_type = info.get('model_type')
                 if classifier_type == 'CV2SimilarityClassifier':
                     return SimilarityBackend(model_dir, device)
-                elif classifier_type in ['SVM', 'Random Forest', 'k-NN', 'Template Matching']:
-                    return ClassicalMLBackend(model_dir, device)
                 else:
-                    raise ValueError(f"Classifier type '{classifier_type}' not supported.")
+                    raise ValueError(f"Classifier type '{classifier_type}' not supported. Only CV2SimilarityClassifier is supported.")
             else:
                 # No model_info.json, assume it's a similarity model (legacy)
                 return SimilarityBackend(model_dir, device)
         elif os.path.exists(os.path.join(model_dir, "model.pth")):
-            # Check if it's resnet or protonet based on model_info.json
-            if os.path.exists(os.path.join(model_dir, "model_info.json")):
-                with open(os.path.join(model_dir, "model_info.json"), 'r') as f:
-                    info = json.load(f)
-                if 'embedding_dim' in info:
-                    return ProtoNetBackend(model_dir, device)
-                else:
-                    return ResNetBackend(model_dir, device)
+            # Assume it's ResNet if model.pth exists
+            return ResNetBackend(model_dir, device)
         raise ValueError(f"Unknown model type: {model_type} and could not auto-detect")
 
 
@@ -1313,18 +1047,6 @@ class DoodleApp:
                 if 'method' in info:
                     info_items.append(("Method", info['method']))
                 
-                # Feature type (for classical ML)
-                if 'feature_type' in info:
-                    info_items.append(("Feature Type", info['feature_type']))
-                
-                # Distance metric (for ProtoNet)
-                if 'distance_metric' in info:
-                    info_items.append(("Distance Metric", info['distance_metric']))
-                
-                # Embedding dimension (for ProtoNet)
-                if 'embedding_dim' in info:
-                    info_items.append(("Embedding Dimension", str(info['embedding_dim'])))
-                
                 # Batch size
                 if 'batch_size' in info:
                     info_items.append(("Batch Size", str(info['batch_size'])))
@@ -1373,7 +1095,7 @@ class DoodleApp:
                         self.screen.blit(value_surface, (modal_x + 150, y_offset))
                         y_offset += line_height
                 
-                # Show all results if available (for classical ML)
+                # Show all results if available
                 if 'all_results' in info:
                     y_offset += 10
                     results_title = self.body_font.render("All Results:", True, ACCENT_1)
@@ -1951,7 +1673,7 @@ def main():
         print(f"Error: No models found in '{MODELS_DIR}'!")
         print("Expected structure:")
         print("  models/resnet/model.pth")
-        print("  models/protonet/model.pth")
+        print("  models/similarity/classifier.pkl")
         return
     
     app = DoodleApp()

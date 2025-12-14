@@ -32,9 +32,6 @@ env/
 # Large dataset directory
 doodles/
 
-# Classical ML model directory
-classical_ml_model/
-
 # LaTeX auxiliary files
 *.aux
 *.log
@@ -66,7 +63,3 @@ archive/
 # Model files: Only ignore files > 100MB and all checkpoints
 # Checkpoints (all checkpoint directories)
 models/**/checkpoints/**
-
-# Large model files (> 100MB)
-models/classical_ml/classifier.pkl
-
