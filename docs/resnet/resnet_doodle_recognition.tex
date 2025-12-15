@@ -291,7 +291,7 @@ To the model, this image is a $28 \times 28$ grid of pixel values (0-255), which
 
 \subsection{Step 2: Convolution - How Kernels Detect Features}
 
-The first layers of ResNet apply \textbf{convolutional filters} (kernels) to detect basic features like edges. Here's how a vertical edge detector works:
+The first layers of ResNet apply \textbf{convolutional filters} (kernels) to detect basic features like edges. To illustrate how convolution works, we use the classical \textbf{Sobel filter} as an example:
 
 \begin{figure}[H]
 \centering
@@ -327,7 +327,7 @@ The first layers of ResNet apply \textbf{convolutional filters} (kernels) to det
 \node at (5, 1.5) {\textbf{-1}};
 \node at (6, 1.5) {\textbf{0}};
 \node at (7, 1.5) {\textbf{1}};
-\node[below] at (6, 0.8) {\footnotesize Sobel filter};
+\node[below] at (6, 0.8) {\footnotesize Sobel filter (example)};
 
 % === RIGHT: Output ===
 \draw[->, ultra thick] (8, 2.5) -- (9, 2.5);
@@ -339,13 +339,15 @@ The first layers of ResNet apply \textbf{convolutional filters} (kernels) to det
 \node[below, text width=3cm, align=center] at (10.5, 1.3) {\footnotesize Strong negative = vertical edge detected!};
 
 \end{tikzpicture}
-\caption{Convolution operation: The kernel slides over the image and produces high activations where edges are detected.}
+\caption{Convolution operation illustrated with the classical Sobel filter. Note: ResNet's actual kernels are \textit{learned}, not hand-designed like Sobel.}
 \label{fig:convolution_example}
 \end{figure}
 
 \textbf{Calculation:} $(255 \times -1) + (255 \times -2) + (255 \times -1) + (0 \times 1) + (0 \times 2) + (0 \times 1) = -1020$
 
 A large magnitude indicates a strong edge was detected at this location.
+
+\textbf{Important Note:} ResNet does \textit{not} actually use the Sobel filter---its kernels are \textbf{learned} during training through backpropagation. However, when researchers visualize the learned filters in early CNN layers, they often find edge-detecting patterns strikingly similar to Sobel. This demonstrates that the network \textit{discovers} these useful features on its own, rather than having them prescribed by humans.
 
 \subsection{Step 3: Feature Hierarchy Through Layers}
 

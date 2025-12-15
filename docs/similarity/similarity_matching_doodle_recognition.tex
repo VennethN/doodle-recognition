@@ -27,9 +27,10 @@
 
 This document explains how OpenCV-based similarity matching works for recognizing doodles from the QuickDraw dataset. Unlike deep learning approaches (ResNet, CNNs), this method uses traditional computer vision techniques built into OpenCV's cv2 library, achieving recognition through direct image-to-image comparison without neural networks.
 
-The implementation combines three complementary methods:
+The implementation combines Sobel edge detection preprocessing with three complementary matching methods:
 \begin{itemize}
-    \item \textbf{Template Matching}: Normalized correlation-based comparison
+    \item \textbf{Sobel Preprocessing}: Hand-designed edge detection filter (NOT learned like CNN filters)
+    \item \textbf{Template Matching}: Normalized correlation-based comparison on edge images
     \item \textbf{Feature Matching}: Keypoint detection and descriptor matching (SIFT/ORB)
     \item \textbf{Histogram Comparison}: Statistical distribution matching
 \end{itemize}
@@ -51,8 +52,32 @@ Just like with ResNet, a doodle is represented as a matrix of pixel values:
 \begin{itemize}
     \item \textbf{Input}: $64 \times 64$ grayscale matrix (values 0-255)
     \item \textbf{Preprocessing}: Invert if needed (ensure dark strokes on light background)
+    \item \textbf{Sobel Edge Detection}: Apply hand-designed Sobel filter to extract edges
     \item \textbf{Normalization}: Scale to range [0, 1] for comparison
 \end{itemize}
+
+\subsection{Sobel Edge Detection Preprocessing}
+
+Before similarity matching, we apply the \textbf{Sobel filter}---a classical edge detection technique that uses hand-designed kernels (NOT learned like CNN filters):
+
+\begin{equation}
+G_x = \begin{bmatrix} -1 & 0 & +1 \\ -2 & 0 & +2 \\ -1 & 0 & +1 \end{bmatrix} * I, \quad
+G_y = \begin{bmatrix} -1 & -2 & -1 \\ 0 & 0 & 0 \\ +1 & +2 & +1 \end{bmatrix} * I
+\end{equation}
+
+The gradient magnitude is computed as:
+\begin{equation}
+G = \sqrt{G_x^2 + G_y^2}
+\end{equation}
+
+\textbf{Why Sobel helps for doodles:}
+\begin{itemize}
+    \item Doodles are essentially \textbf{line drawings}---edge information is the primary feature
+    \item Sobel emphasizes strokes while reducing background noise
+    \item Unlike CNN filters, Sobel kernels are \textbf{fixed mathematical formulas}, not learned from data
+\end{itemize}
+
+\textbf{Key distinction from CNNs:} While CNNs \textit{learn} their own optimal edge detectors through backpropagation, Sobel uses predetermined kernel weights designed by humans in the 1960s. This is why classical methods cannot adapt to task-specific patterns.
 
 \subsection{The Similarity Matching Pipeline}
 
@@ -67,7 +92,9 @@ Just like with ResNet, a doodle is represented as a matrix of pixel values:
 % Pipeline steps
 \node[box, text width=3.5cm, align=center] (input) {Test Image\\64x64 grayscale};
 
-\node[box, text width=3.5cm, align=center, below of=input] (template) {Template Matching\\Correlation scores};
+\node[box, text width=3.5cm, align=center, below of=input, fill=orange!20] (sobel) {Sobel Edge Detection\\Hand-designed filter};
+
+\node[box, text width=3.5cm, align=center, below of=sobel] (template) {Template Matching\\Correlation scores};
 
 \node[box, text width=3.5cm, align=center, below of=template] (features) {Feature Matching\\Keypoint comparison};
 
@@ -78,9 +105,10 @@ Just like with ResNet, a doodle is represented as a matrix of pixel values:
 \node[below of=combine, node distance=1cm] (output) {Predicted Class};
 
 % Arrows
-\draw[arrow] (input) -- (template);
-\draw[arrow] (input) -| +(-2,0) |- (features);
-\draw[arrow] (input) -| +(2,0) |- (histogram);
+\draw[arrow] (input) -- (sobel);
+\draw[arrow] (sobel) -- (template);
+\draw[arrow] (sobel) -| +(-2,0) |- (features);
+\draw[arrow] (sobel) -| +(2,0) |- (histogram);
 \draw[arrow] (template) -- (combine);
 \draw[arrow] (features) -- (combine);
 \draw[arrow] (histogram) -- (combine);
@@ -407,8 +435,9 @@ Let's trace how the system recognizes a cat doodle:
 
 \begin{itemize}
     \item Load test image: 64×64 grayscale
-    \item Normalize pixel values to [0, 1]
     \item Ensure consistent polarity (dark strokes on light background)
+    \item \textbf{Apply Sobel edge detection} (hand-designed filter)
+    \item Normalize pixel values to [0, 1]
 \end{itemize}
 
 \subsubsection{Step 2: Template Matching}
@@ -569,6 +598,7 @@ For each test image:
 
 \begin{itemize}
     \item \textbf{Image Size}: 64×64 pixels
+    \item \textbf{Preprocessing}: Sobel edge detection (hand-designed filter)
     \item \textbf{Training Samples}: 1000 per category
     \item \textbf{Test Samples}: 200 per category
     \item \textbf{Number of Categories}: All available (340)
@@ -616,7 +646,7 @@ For each test image:
 
 % Row 6
 \node[left] at (0, 0.2) {Accuracy};
-\node[text width=3.5cm, align=center] at (4, 0.2) {\small Moderate};
+\node[text width=3.5cm, align=center] at (4, 0.2) {\small Low (~16\%)};
 \node[text width=3.5cm, align=center] at (9, 0.2) {\small High (75\%)};
 
 \end{tikzpicture}
@@ -646,19 +676,21 @@ For each test image:
 
 \section{Results}
 
-The multi-method OpenCV similarity classifier achieves:
+The multi-method OpenCV similarity classifier with Sobel preprocessing achieves:
 
 \begin{itemize}
-    \item \textbf{Test Accuracy}: Variable (depends on test subset)
+    \item \textbf{Test Accuracy}: ~16\% (on 500-sample test subset)
     \item \textbf{Method Breakdown}:
     \begin{itemize}
-        \item Template matching alone: ~15-25\%
-        \item Histogram matching alone: ~20-30\%
-        \item Multi-method combined: ~25-35\%
+        \item Template matching alone: ~17\%
+        \item Multi-method combined: ~14-16\%
+        \item Histogram matching alone: ~0.2\% (essentially random for 340 classes)
     \end{itemize}
     \item \textbf{Processing Time}: ~0.5-2 seconds per image
     \item \textbf{Model Size}: ~50MB (templates only)
 \end{itemize}
+
+\textbf{Note:} These accuracies are far below the ResNet model (75\%), demonstrating the fundamental limitation of hand-crafted features---even with Sobel edge detection preprocessing.
 
 \subsection{When to Use Similarity Matching}
 
@@ -707,7 +739,7 @@ Where $\oplus$ is XOR operation.
 
 \section{Conclusion}
 
-OpenCV similarity matching provides a transparent, training-free alternative to deep learning for doodle recognition. While it doesn't match the accuracy of ResNet, it offers:
+OpenCV similarity matching with Sobel edge detection provides a transparent, training-free alternative to deep learning for doodle recognition. While it doesn't match the accuracy of ResNet, it offers:
 
 \begin{itemize}
     \item Complete interpretability of decisions
@@ -716,14 +748,18 @@ OpenCV similarity matching provides a transparent, training-free alternative to 
     \item Educational value in understanding computer vision
 \end{itemize}
 
-The multi-method approach (template + features + histogram) demonstrates how combining complementary techniques can improve robustness, a principle that extends to many computer vision applications.
+The use of \textbf{Sobel preprocessing} demonstrates a key insight: even with classical edge detection, hand-crafted features cannot match learned representations. The Sobel filter uses \textit{fixed kernels designed by humans in the 1960s}, while CNNs \textit{learn} their own optimal edge detectors through backpropagation---and often discover patterns similar to Sobel, but tailored to the specific task.
 
-For production doodle recognition, ResNet remains superior. However, similarity matching serves as an excellent baseline and educational tool for understanding how computers "see" and compare images.
+The multi-method approach (Sobel + template + features + histogram) demonstrates how combining complementary techniques can improve robustness, a principle that extends to many computer vision applications.
+
+For production doodle recognition, ResNet remains superior. However, similarity matching with Sobel serves as an excellent baseline and educational tool for understanding the difference between hand-designed and learned features.
 
 \section{References}
 
 \begin{itemize}
+    \item Sobel, I. (1968). An Isotropic 3×3 Image Gradient Operator. Stanford AI Project.
     \item OpenCV Template Matching: \url{https://docs.opencv.org/4.x/d4/dc6/tutorial_py_template_matching.html}
+    \item OpenCV Sobel Derivatives: \url{https://docs.opencv.org/4.x/d2/d2c/tutorial_sobel_derivatives.html}
     \item Lowe, D.G. (2004). Distinctive Image Features from Scale-Invariant Keypoints. IJCV.
     \item Rublee, E. et al. (2011). ORB: An efficient alternative to SIFT or SURF. ICCV.
     \item QuickDraw Dataset: \url{https://github.com/googlecreativelab/quickdraw-dataset}

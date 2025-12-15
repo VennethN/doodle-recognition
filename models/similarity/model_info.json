@@ -3,6 +3,7 @@
   "method": "multi",
   "image_size": 64,
   "num_classes": 340,
-  "accuracy": 0.14,
-  "description": "OpenCV similarity matching using template matching, feature matching, and histogram comparison"
+  "accuracy": 0.162,
+  "use_sobel": true,
+  "description": "OpenCV similarity matching with Sobel edge detection preprocessing, using template matching, feature matching, and histogram comparison"
 }

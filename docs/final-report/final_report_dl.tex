@@ -386,10 +386,20 @@ model.fc = nn.Sequential(
 
 As a baseline comparison, we implemented a traditional computer vision approach using OpenCV:
 
+\subsubsection{Sobel Edge Detection Preprocessing}
+
+Before similarity matching, images are preprocessed using the \textbf{Sobel filter}---a classical edge detector with hand-designed kernels:
+
+\begin{equation}
+G = \sqrt{G_x^2 + G_y^2}, \quad \text{where } G_x = \begin{bmatrix} -1 & 0 & +1 \\ -2 & 0 & +2 \\ -1 & 0 & +1 \end{bmatrix} * I
+\end{equation}
+
+\textbf{Key distinction from CNNs:} Unlike CNN filters which are \textit{learned} through backpropagation, Sobel kernels are \textit{fixed mathematical formulas} designed by humans. This demonstrates why classical methods cannot adapt to task-specific patterns.
+
 \subsubsection{Multi-Method Similarity}
 
 \begin{enumerate}
-    \item \textbf{Template Matching}: Normalized cross-correlation (TM\_CCOEFF\_NORMED)
+    \item \textbf{Template Matching}: Normalized cross-correlation (TM\_CCOEFF\_NORMED) on Sobel edges
     \item \textbf{Feature Matching}: SIFT/ORB keypoint detection and descriptor matching
     \item \textbf{Histogram Comparison}: Correlation, intersection, and Bhattacharyya distance
 \end{enumerate}
@@ -487,7 +497,7 @@ Total Parameters & 11,614,612 \\
 \textbf{Model} & \textbf{Accuracy} & \textbf{Parameters} & \textbf{Inference} & \textbf{Approach} \\
 \midrule
 ResNet18 & 75.03\% & 11.6M & ~50ms & Transfer Learning \\
-OpenCV Similarity & 25-35\% & 0 & ~500ms & Template Matching \\
+OpenCV Similarity & ~16\% & 0 & ~500ms & Sobel + Template Matching \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -604,14 +614,16 @@ The ResNet18 model achieved 75.03\% top-1 accuracy, which is competitive with pu
 
 \subsubsection{Similarity Matching Baseline}
 
-The OpenCV similarity approach (25-35\% accuracy) performed significantly worse than deep learning methods, highlighting:
+The OpenCV similarity approach (~16\% accuracy) performed significantly worse than deep learning methods, even with Sobel edge detection preprocessing:
 
 \begin{itemize}
-    \item \textbf{Limitation of Hand-crafted Features}: Template matching cannot capture the abstract variations in human drawings.
+    \item \textbf{Limitation of Hand-crafted Features}: Despite Sobel preprocessing extracting edge information, template matching cannot capture the abstract variations in human drawings.
+    
+    \item \textbf{Sobel vs. Learned Filters}: The Sobel filter uses \textit{fixed, hand-designed kernels}, while CNNs \textit{learn} optimal edge detectors through backpropagation. CNNs often discover Sobel-like patterns but are not constrained to them.
     
     \item \textbf{Computational Overhead}: Despite lower accuracy, similarity matching required more inference time due to comparisons with all templates.
     
-    \item \textbf{Educational Value}: The approach serves as a useful baseline for understanding what deep learning learns.
+    \item \textbf{Educational Value}: The approach demonstrates why hand-crafted features cannot match learned representations---even classical edge detection (Sobel) cannot adapt to task-specific patterns.
 \end{itemize}
 
 \subsection{Challenges Encountered}
@@ -651,7 +663,7 @@ The OpenCV similarity approach (25-35\% accuracy) performed significantly worse 
 \toprule
 \textbf{Criterion} & \textbf{ResNet18} & \textbf{OpenCV Similarity} \\
 \midrule
-Accuracy & High (75\%) & Moderate (25-35\%) \\
+Accuracy & High (75\%) & Low (~16\%) \\
 Model size & Large (44MB) & Small (templates only) \\
 Inference speed & Fast (50ms) & Slower (~500ms) \\
 Training data requirement & High & Low \\
@@ -672,7 +684,7 @@ Interpretability & Low & High \\
 This project successfully developed and deployed a comprehensive deep learning solution for real-time doodle recognition with educational applications. Our key achievements include:
 
 \begin{enumerate}
-    \item \textbf{Multiple Model Implementations}: We successfully implemented and compared two distinct approaches---ResNet18 transfer learning (75.03\% accuracy) and OpenCV similarity matching (25-35\% accuracy).
+    \item \textbf{Multiple Model Implementations}: We successfully implemented and compared two distinct approaches---ResNet18 transfer learning (75.03\% accuracy) and OpenCV similarity matching with Sobel preprocessing (~16\% accuracy).
     
     \item \textbf{High Classification Performance}: The ResNet18 model achieved 90.70\% top-3 accuracy across 340 categories, demonstrating practical utility for educational applications where near-matches still provide learning value.
     
