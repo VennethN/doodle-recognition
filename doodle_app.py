@@ -351,9 +351,11 @@ class SimilarityBackend(ModelBackend):
                 info = json.load(f)
             self.img_size = info.get('img_size', 64)
             self.method = info.get('method', 'multi')
+            self.use_sobel = info.get('use_sobel', False)
         else:
             self.img_size = 64
             self.method = 'multi'
+            self.use_sobel = False
         
         # Load label mappings
         with open(os.path.join(model_dir, "label_mappings.json"), 'r') as f:
@@ -417,6 +419,10 @@ class SimilarityBackend(ModelBackend):
         
         # Convert to uint8
         img_uint8 = img_resized.astype(np.uint8)
+        
+        # Apply Sobel edge detection if model was trained with it
+        if self.use_sobel:
+            img_uint8 = self._apply_sobel(img_uint8)
         
         # Precompute expensive operations once (not per class!)
         precomputed = {}
@@ -490,6 +496,25 @@ class SimilarityBackend(ModelBackend):
                 scores.append(0.0)
         
         return np.mean(scores) if scores else 0.0
+    
+    def _apply_sobel(self, img):
+        """Apply Sobel edge detection to an image.
+        
+        The Sobel filter detects edges by computing gradients in x and y directions.
+        This is a classical computer vision technique - the kernel weights are 
+        hand-designed, NOT learned like in CNNs.
+        """
+        # Sobel kernels for x and y gradients
+        sobel_x = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=3)  # Horizontal edges
+        sobel_y = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=3)  # Vertical edges
+        
+        # Compute gradient magnitude
+        magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
+        
+        # Normalize to 0-255 range
+        magnitude = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX)
+        
+        return magnitude.astype(np.uint8)
     
     def _template_match_score(self, img, template):
         """Use cv2.matchTemplate with multiple methods."""
