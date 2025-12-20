@@ -57,9 +57,16 @@ doodles/
 .DS_Store
 Thumbs.db
 
+# Environment files
+.env
+.env.*
+
 # Archive folder (old/backup files)
 archive/
 
 # Model files: Only ignore files > 100MB and all checkpoints
 # Checkpoints (all checkpoint directories)
 models/**/checkpoints/**
+
+# Documentation (not needed for HF deployment)
+docs/
