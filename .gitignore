@@ -70,3 +70,4 @@ models/**/checkpoints/**
 
 # Documentation (not needed for HF deployment)
 docs/
+./docs
