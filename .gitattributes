@@ -3,3 +3,6 @@
 *.pdf filter=lfs diff=lfs merge=lfs -text
 *.png filter=lfs diff=lfs merge=lfs -text
 *.h5 filter=lfs diff=lfs merge=lfs -text
+
+# Exclude docs/images from LFS - these are small documentation images
+docs/images/*.png !filter !diff !merge -text

@@ -29,3 +29,14 @@ A deep learning web app that recognizes hand-drawn doodles in real-time.
 - PyTorch for deep learning
 - OpenCV for similarity matching
 - HTML5 Canvas for drawing
+
+## Team Members
+
+| Name | Student ID |
+|------|------------|
+| Valent Nathanael | 2702343706 |
+| Dimas Putra Aryawan | 2702262242 |
+| Yehezkiel Kenneth Hosea | 2702352010 |
+| Ivan Feri Budiman | 2702377606 |
+| B Orten Subianto Sutanto | 2702256372 |
+

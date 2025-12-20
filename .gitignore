@@ -38,7 +38,7 @@ doodles/
 *.out
 *.toc
 *.synctex.gz
-*.fls
+*.fls 
 *.fdb_latexmk
 *.bbl
 *.blg
@@ -71,3 +71,6 @@ models/**/checkpoints/**
 # Documentation (not needed for HF deployment)
 docs/
 ./docs
+# But allow docs/images for documentation assets
+!docs/images/
+!docs/images/**
