@@ -598,10 +598,13 @@ if __name__ == '__main__':
     # Initialize models before starting server
     init_models()
     
+    # Use PORT env var for HF Spaces (default 7860), or 5001 for local dev
+    port = int(os.environ.get("PORT", 5001))
+    
     print("\n" + "="*50)
     print("Starting Doodle Recognition Web App")
-    print("Open http://localhost:5001 in your browser")
+    print(f"Open http://localhost:{port} in your browser")
     print("="*50 + "\n")
     
-    app.run(debug=False, host='0.0.0.0', port=5001)
+    app.run(debug=False, host='0.0.0.0', port=port)
 
