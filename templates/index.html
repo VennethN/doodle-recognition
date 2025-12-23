@@ -424,6 +424,7 @@
             background: var(--border-color);
             border-radius: 3px;
             overflow: hidden;
+            position: relative;
         }
 
         .prediction-bar-fill {
@@ -435,6 +436,26 @@
 
         .prediction-item.top-1 .prediction-bar-fill {
             background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+        }
+
+        /* Threshold marker for challenge mode */
+        .prediction-bar .threshold-marker {
+            position: absolute;
+            left: 10%;
+            top: -2px;
+            bottom: -2px;
+            width: 1px;
+            background: var(--text-secondary);
+            opacity: 0.3;
+        }
+
+        /* Dim predictions below threshold in challenge mode */
+        .prediction-item.below-threshold {
+            opacity: 0.5;
+        }
+
+        .prediction-item.below-threshold .prediction-bar-fill {
+            background: var(--text-secondary);
         }
 
         .prediction-confidence {
@@ -732,6 +753,14 @@
             color: var(--accent-gold);
         }
 
+        .min-confidence-note {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            opacity: 0.6;
+            margin-top: 4px;
+            text-align: center;
+        }
+
         /* Add bottom padding to container when challenge mode is active */
         body.challenge-active {
             padding-bottom: 100px;
@@ -906,6 +935,7 @@
                         <span>#4 = 2pts</span>
                         <span>#5 = 1pt</span>
                     </div>
+                    <div class="min-confidence-note">min 10% confidence required</div>
                 </div>
                 <div class="challenge-right">
                     <div class="challenge-stats">
@@ -1411,13 +1441,16 @@
                 const rankClass = i === 0 ? 'top-1' : (i < 3 ? `top-${i + 1}` : '');
                 const isTarget = challengeMode && pred.label.toLowerCase() === challengeWord.toLowerCase();
                 const inScoringRange = i < 5;
-                const pointsHint = challengeMode && inScoringRange ? ` <span class="points-hint">+${POINTS_BY_RANK[i]}pts</span>` : '';
+                const belowThreshold = challengeMode && isTarget && pred.confidence < MIN_CONFIDENCE_THRESHOLD;
+                const pointsHint = challengeMode && inScoringRange && !belowThreshold ? ` <span class="points-hint">+${POINTS_BY_RANK[i]}pts</span>` : '';
+                const thresholdMarker = challengeMode && inScoringRange ? '<div class="threshold-marker"></div>' : '';
                 
                 return `
-                    <div class="prediction-item ${rankClass} ${isTarget ? 'target-word' : ''} ${challengeMode && inScoringRange ? 'scoring-range' : ''}">
+                    <div class="prediction-item ${rankClass} ${isTarget ? 'target-word' : ''} ${challengeMode && inScoringRange ? 'scoring-range' : ''} ${belowThreshold ? 'below-threshold' : ''}">
                         <span class="prediction-rank">#${i + 1}</span>
                         <span class="prediction-label">${isTarget ? '🎯 ' : ''}${pred.label}${isTarget ? pointsHint : ''}</span>
                         <div class="prediction-bar">
+                            ${thresholdMarker}
                             <div class="prediction-bar-fill" style="width: ${confidence}%"></div>
                         </div>
                         <span class="prediction-confidence">${confidence}%</span>
@@ -1430,11 +1463,15 @@
         // Challenge Mode
         // =====================================================================
         const POINTS_BY_RANK = [5, 4, 3, 2, 1]; // #1=5pts, #2=4pts, etc.
+        const MIN_CONFIDENCE_THRESHOLD = 0.10; // Minimum 10% confidence required to pass
         
         function checkChallengeSuccess(predictions) {
-            // Check if challenge word is in top 5 predictions
+            // Check if challenge word is in top 5 predictions with minimum confidence
             const top5 = predictions.slice(0, 5);
-            const matchIndex = top5.findIndex(p => p.label.toLowerCase() === challengeWord.toLowerCase());
+            const matchIndex = top5.findIndex(p => 
+                p.label.toLowerCase() === challengeWord.toLowerCase() && 
+                p.confidence >= MIN_CONFIDENCE_THRESHOLD
+            );
             
             if (matchIndex !== -1) {
                 const newPoints = POINTS_BY_RANK[matchIndex];

@@ -1302,10 +1302,11 @@ class DoodleApp:
         if self.has_drawn:
             self.predictions = self.current_model.predict(self.canvas)
             
-            # Check for challenge success
+            # Check for challenge success (minimum 10% confidence required)
+            MIN_CONFIDENCE_THRESHOLD = 0.10
             if self.mode == MODE_CHALLENGE and self.target_word:
                 for i, (label, confidence) in enumerate(self.predictions[:5]):
-                    if label.lower() == self.target_word.lower():
+                    if label.lower() == self.target_word.lower() and confidence >= MIN_CONFIDENCE_THRESHOLD:
                         new_rank = i + 1
                         if not self.challenge_success:
                             self.challenge_success = True
