@@ -1059,6 +1059,10 @@
         let bestStreak = 0;
         let highScore = 0;  // Best score ever achieved
         
+        // Challenge mode constants
+        const POINTS_BY_RANK = [5, 4, 3, 2, 1]; // #1=5pts, #2=4pts, etc.
+        const MIN_CONFIDENCE_THRESHOLD = 0.10; // Minimum 10% confidence required to pass
+        
         // Load saved scores from localStorage
         function loadScores() {
             try {
@@ -1462,8 +1466,6 @@
         // =====================================================================
         // Challenge Mode
         // =====================================================================
-        const POINTS_BY_RANK = [5, 4, 3, 2, 1]; // #1=5pts, #2=4pts, etc.
-        const MIN_CONFIDENCE_THRESHOLD = 0.10; // Minimum 10% confidence required to pass
         
         function checkChallengeSuccess(predictions) {
             // Check if challenge word is in top 5 predictions with minimum confidence
